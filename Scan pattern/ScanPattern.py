@@ -1,17 +1,18 @@
 from configparser import ConfigParser
 import numpy as np
 import matplotlib.pyplot as plt
+import bezier
 
 
 def read_ini(filename):
     parser = ConfigParser()
     parser.read(filename)
-    # confdict = {section: dict(parser.items(section)) for section in parser.sections()}
-    confdict = {}
+    # pars = {section: dict(parser.items(section)) for section in parser.sections()}
+    pars = {}
     for section in parser.sections():
         for item in parser.items(section):
-            confdict[item[0]] = float(item[1])
-    return confdict
+            pars[item[0]] = float(item[1])
+    return pars
 
 
 def create_signals(pars):
