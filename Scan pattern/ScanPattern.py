@@ -39,6 +39,7 @@ def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
 def check_image(n=500):
     pix_volt = 20
     x = np.arange(n)
+    scipy.ndimage.shift(im, (xshift, yshift))
 
 def create_signals(pars):
     t = np.arange(0, pars['exposure (s)'], 1.0 / pars['daq rate (hz)'])
