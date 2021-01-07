@@ -36,10 +36,35 @@ def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
     x_array = np.append(ynew, x_array)
     return x_array
 
-def check_image(n=500):
-    pix_volt = 20
-    x = np.arange(n)
-    scipy.ndimage.shift(im, (xshift, yshift))
+
+def check_image(channels, n=250):
+    w = 10
+    x = np.asarray([list(range(n))] * n)
+    im = np.exp(-(x - n / 2) ** 2 / w ** 2) * np.exp(-(x.T - n / 2) ** 2 / w ** 2)
+    im *= im
+
+    n_spots = 5
+    d_spots = 40
+
+    loc = np.zeros((2, n_spots ** 2))
+    for i in range(n_spots):
+        loc[0][i * n_spots:(i + 1) * n_spots] = np.arange(0, n_spots * d_spots, d_spots) + 0.5 * d_spots * (i % 2)
+        loc[1][i * n_spots:(i + 1) * n_spots] = np.ones(n_spots) * d_spots * i * np.sqrt(3) / 2
+
+    for i, _ in enumerate(loc):
+        loc[i] = loc[i] - np.mean(loc[i])
+
+    im2 = im * 0
+    for x in loc.T:
+        im2 += scipy.ndimage.shift(im, x)
+
+    im = im2
+    im2 = im*0
+    for x in channels.T:
+        im2 += scipy.ndimage.shift(im, x)
+    plt.imshow(im2.T, origin='lower')
+    plt.show()
+
 
 def create_signals(pars):
     t = np.arange(0, pars['exposure (s)'], 1.0 / pars['daq rate (hz)'])
@@ -55,7 +80,7 @@ def create_signals(pars):
         y = pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
     else:
         tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
-        x = (1 / 4) * pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
+        x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
         y = pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
     ones = np.ones_like(x)
     x = add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)
@@ -101,17 +126,18 @@ def create_signals(pars):
         except NameError:
             block = new_block
 
-    plt.scatter(block[channels.index('X (V)')], block[channels.index('Y (V)')],marker = '.')
-    plt.xlim([-1,1])
-    plt.ylim([-1,1])
-    # plt.plot(block.T)
-    # plt.legend(channels)
+    # plt.scatter(block[channels.index('X (V)')], block[channels.index('Y (V)')], marker='.')
+    # plt.xlim([-1, 1])
+    # plt.ylim([-1, 1])
+    plt.plot(block.T)
+    plt.legend(channels)
     plt.show()
-    return
+    return block
 
 
 if __name__ == '__main__':
     settings = read_ini(r'test.ini')
-    for s in settings:
-        print(s, settings[s])
-    create_signals(settings)
+    # for s in settings:
+    #     print(s, settings[s])
+    channels = create_signals(settings)
+    check_image(35.0*channels[:2])
