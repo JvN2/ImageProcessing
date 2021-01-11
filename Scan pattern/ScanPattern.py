@@ -37,14 +37,12 @@ def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
     return x_array
 
 
-def check_image(channels, n=250):
+def check_image(channels, n_pix=300, n_spots=5, d_spots=40, pix_volt=70, frames=None):
+    print('Reconstructing excitation image ...')
     w = 10
-    x = np.asarray([list(range(n))] * n)
-    im = np.exp(-(x - n / 2) ** 2 / w ** 2) * np.exp(-(x.T - n / 2) ** 2 / w ** 2)
+    x = np.asarray([list(range(n_pix))] * n_pix)
+    im = np.exp(-(x - n_pix / 2) ** 2 / w ** 2) * np.exp(-(x.T - n_pix / 2) ** 2 / w ** 2)
     im *= im
-
-    n_spots = 5
-    d_spots = 40
 
     loc = np.zeros((2, n_spots ** 2))
     for i in range(n_spots):
@@ -55,18 +53,33 @@ def check_image(channels, n=250):
         loc[i] = loc[i] - np.mean(loc[i])
 
     im2 = im * 0
-    for x in loc.T:
-        im2 += scipy.ndimage.shift(im, x)
+    for i, x in enumerate(loc.T):
+        if i == 0:
+            im2 += scipy.ndimage.shift(-im, x)
+        else:
+            im2 += scipy.ndimage.shift(im, x)
 
     im = im2
-    im2 = im*0
-    for x in channels.T:
-        im2 += scipy.ndimage.shift(im, x)
+    im2 = im * 0
+
+    daq_index = np.asarray(range(len(channels[4])))
+    all_frames = np.asarray((
+        daq_index[np.diff(channels[4], prepend=0) == 1],
+        daq_index[np.diff(channels[4], prepend=0) == -1])).T
+    if frames is None:
+        frames = range(len(all_frames))
+
+    for i, f in enumerate(all_frames):
+        if i in frames:
+            print(f'Frame: {i}')
+            for x in channels.T[f[0]:f[1]]:
+                im2 += scipy.ndimage.shift(im, pix_volt * x[:2])
     plt.imshow(im2.T, origin='lower')
+    # plt.plot(im2)
     plt.show()
 
 
-def create_signals(pars):
+def create_signals(pars, show=False):
     t = np.arange(0, pars['exposure (s)'], 1.0 / pars['daq rate (hz)'])
     n_slice = int(pars['slice (s)'] * pars['daq rate (hz)'])
     n_transition = int(pars['ramp time (s)'] * pars['daq rate (hz)'])
@@ -74,47 +87,85 @@ def create_signals(pars):
     n_slice = np.max([n_slice, n_active])
     n_pwm = 50
 
-    if pars['slim'] == 1:
-        tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
+    tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
+    if pars['slim'] == 0:
         x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
         y = pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
+        c_block = [add_transition(0, np.ones_like(x), 0, n_transition, kind='zero')]
+        x_block = [add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)]
+        y_block = [add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition)]
     else:
-        tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
-        x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
-        y = pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
+        for phase in range(int(pars['slim'])):
+            x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau)
+            # y = 0.15 * pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau)
+            y = 0.5 * np.ones_like(x) * phase / int(pars['slim'])
+
+            a = 0.63 * pars['a spiral (v)']
+            t0 = np.max(t) / 2
+            x = np.exp(-(t - t0) ** 2 / (0.5 * t0) ** 2)
+            x = np.diff(x)
+            x = np.append(x, 0)
+            x /= np.max(x)
+            x *= a
+            x = np.roll(x, len(t) // 2)
+            x = np.linspace(a, -a, len(x) )
+
+            tmp = x
+            angle = np.pi / 6
+            angle = -np.pi/2
+            # angle = (5/6) *np.pi
+            x = np.cos(angle) * x + np.sin(angle) * y
+            y = np.sin(angle) * tmp + np.cos(angle) * y
+
+            x += pars['xc (v)']
+            y += pars['yc (v)']
+
+            if phase == 0:
+                c_block = [add_transition(0, np.ones_like(x), 0, n_transition, kind='zero')]
+                x_block = [add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)]
+                y_block = [add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition)]
+            else:
+                c_block.append(add_transition(0, np.ones_like(x), 0, n_transition, kind='zero'))
+                x_block.append(add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition))
+                y_block.append(add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition))
+
     ones = np.ones_like(x)
-    x = add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)
-    y = add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition)
-    y[1] = y[0]
-    x[1] = x[0]
-    c = add_transition(0, ones, 0, n_transition, kind='zero')
 
     channels = ['X (V)', 'Y (V)', 'Z (V)', 'LED (V)', 'Camera', 'UV']
     for step in range(int(pars['nsteps'])):
-        new_block = np.zeros([len(channels), n_slice])
-        new_block[channels.index('X (V)')][:n_active] = x
-        new_block[channels.index('X (V)')][n_active:] = x[0]
-        new_block[channels.index('Y (V)')][:n_active] = y
-        new_block[channels.index('Y (V)')][n_active:] = y[0]
-        new_block[channels.index('Z (V)')][:n_active] = add_transition(
-            np.max([0, pars['zstep (v)'] * (step - 1)]),
-            ones * step * pars['zstep (v)'],
-            pars['zstep (v)'] * step, n_transition)
-        new_block[channels.index('Z (V)')][n_active:] = pars['zstep (v)'] * step
-        new_block[channels.index('Camera')][:n_active] = c
-        pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['uv (%)'] / 100
-        new_block[channels.index('UV')] = pwm
-        new_block[channels.index('UV')][:n_active] = 0
-        try:
-            block = np.append(block, new_block, axis=1)
-        except NameError:
-            block = new_block
+        for x, y, c in zip(x_block, y_block, c_block):
+            new_block = np.zeros([len(channels), n_slice])
+            new_block[channels.index('X (V)')][:n_active] = x
+            new_block[channels.index('X (V)')][n_active:] = x[0]
+            new_block[channels.index('Y (V)')][:n_active] = y
+            new_block[channels.index('Y (V)')][n_active:] = y[0]
+
+            new_block[channels.index('Z (V)')][:n_active] = add_transition(
+                pars['z0 (v)'],
+                ones * (step + 1) * pars['zstep (v)'],
+                pars['z0 (v)'], n_transition)
+            new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
+
+            new_block[channels.index('Camera')][:n_active] = c
+            pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['uv (%)'] / 100
+            new_block[channels.index('UV')] = pwm
+            new_block[channels.index('UV')][:n_active] = 0
+
+            try:
+                block = np.append(block, new_block, axis=1)
+            except UnboundLocalError:
+                block = np.asarray(new_block)
 
     if pars['led (v)'] > 0:
         new_block = np.zeros([len(channels), n_slice])
         new_block[channels.index('X (V)')] = pars['x0 (v)']
         new_block[channels.index('Y (V)')] = pars['y0 (v)']
-        new_block[channels.index('Z (V)')] = pars['z0 (v)']
+        new_block[channels.index('Z (V)')][:n_active] = add_transition(
+            pars['z0 (v)'],
+            ones * pars['zstep (v)'],
+            pars['z0 (v)'], n_transition)
+        new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
+
         new_block[channels.index('Camera')][:n_active] = c
         pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['uv (%)'] / 100
         new_block[channels.index('UV')] = pwm
@@ -123,21 +174,36 @@ def create_signals(pars):
         new_block[channels.index('LED (V)')][n_transition: n_transition + len(ones)] = 5 * pwm
         try:
             block = np.append(new_block, block, axis=1)
-        except NameError:
-            block = new_block
+        except ValueError:
+            block = np.asarray(new_block)
 
     # plt.scatter(block[channels.index('X (V)')], block[channels.index('Y (V)')], marker='.')
     # plt.xlim([-1, 1])
     # plt.ylim([-1, 1])
-    plt.plot(block.T)
-    plt.legend(channels)
-    plt.show()
+    # plt.show()
+
+    if show:
+        plt.plot(block.T)
+        plt.legend(channels)
+        plt.show()
     return block
+
+
+def LV_create_scan_pattern(filename):
+    settings = read_ini(filename)
+    channels = create_signals(settings, show=False)
+    return channels
 
 
 if __name__ == '__main__':
     settings = read_ini(r'test.ini')
     # for s in settings:
     #     print(s, settings[s])
-    channels = create_signals(settings)
-    check_image(35.0*channels[:2])
+    channels = create_signals(settings, show=True)
+    check_image(channels, frames=[0,1,2])
+    # print(LV_create_scan_pattern(r'C:\Users\noort\PycharmProjects\2Photon-microscope\Scan pattern\test.ini'))
+    # x = []
+    # x = safe_append(x, np.linspace(5, 10,5))
+    # print(x)
+    # x = safe_append(x, np.linspace(5, 10, 5))
+    # print(x)
