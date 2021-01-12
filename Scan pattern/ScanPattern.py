@@ -89,8 +89,8 @@ def create_signals(pars, show=False):
 
     tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
     if pars['slim'] == 0:
-        x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
-        y = pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
+        x = 0.455*pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
+        y = 0.455*pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
         c_block = [add_transition(0, np.ones_like(x), 0, n_transition, kind='zero')]
         x_block = [add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)]
         y_block = [add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition)]
