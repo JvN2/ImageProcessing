@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageSequence, TiffImagePlugin
 sys.path.append(r'C:\Users\noort\PycharmProjects\TraceEditor')
 import TraceIO as tio
 
-
 photons_e = 3.0
 font = ImageFont.truetype('arial', 25)
 
@@ -116,27 +115,30 @@ def merge_tiffs(filepaths, n_frames=None, SLIM_periods=1):
     return fileout
 
 
-def add_time_bar(img, i, frame_time_s=None, n_frames=None):
+def add_time_bar(img, i, n, progress_text=None, progress_step=None):
+    bg_color = (255, 255, 255)
     size_pix = np.asarray(img.size)
     img_draw = ImageDraw.Draw(img)
-    if frame_time_s is not None and n_frames is not None:
+    if progress_step is not None:
         box = (5, size_pix[0] - 5, size_pix[0] - 5, size_pix[1] - 10)
-        bar = (5, size_pix[0] - 5, 5 + (size_pix[0] - 10) * i / n_frames, size_pix[1] - 10)
-        img_draw.rectangle(box, outline=255)
-        img_draw.rectangle(bar, outline=255, fill=255)
-        img_draw.text((5, size_pix[1] - 40), f'{frame_time_s * i:.1f} s', fill=255, font=font)
+        bar = (5, size_pix[0] - 5, 5 + (size_pix[0] - 10) * i / (n - 1), size_pix[1] - 10)
+        img_draw.rectangle(box, outline=bg_color)
+        img_draw.rectangle(bar, outline=bg_color, fill=bg_color)
+    if progress_text is not None:
+        img_draw.text((5, size_pix[1] - 40), f'{progress_text} = {progress_step * i:4.1f}', fill=bg_color, font=font)
     return
 
 
 def add_scale_bar(img, pix_um, scale=1, barsize_um=5):
+    bg_color = (255, 255, 255)
     size_pix = np.asarray(img.size)
     pix_um /= scale
     img_draw = ImageDraw.Draw(img)
     if pix_um is not None:
         bar = (size_pix[0] - 5 - barsize_um / pix_um, size_pix[1] - 20, size_pix[0] - 5, size_pix[1] - 25)
-        img_draw.rectangle(bar, fill=255)
+        img_draw.rectangle(bar, fill=bg_color)
         img_draw.text((size_pix[0] - 5 - barsize_um / pix_um - 85, size_pix[1] - 40),
-                      f'{barsize_um:3d} um', fill=255, font=font)
+                      f'{barsize_um:3d} um', fill=bg_color, font=font)
     return
 
 
@@ -427,29 +429,33 @@ def process_2p(filenames):
     return im
 
 
-def save_gif(filename, frames, fps = 5, z_range = [120, 200], progress_text ='', progress_step = None):
+def save_gif(filename, frames, fps=5, z_range=[120, 200], progress_text='', progress_step=None, um_pix=None):
     filename = tio.change_extension(filename, 'gif')
     cm = plt.get_cmap('hot')
-    bg_color = (255,255,255)
+    bg_color = (255, 255, 255)
     size_pix = np.shape(frames[0])
     n_frames = len(frames)
     ims = []
     for i, frame in enumerate(frames):
-        frame = (np.clip(frame, a_min = z_range[0], a_max = z_range[1]) - z_range[0]) / (z_range[1] - z_range[0])
+        frame = (np.clip(frame, a_min=z_range[0], a_max=z_range[1]) - z_range[0]) / (z_range[1] - z_range[0])
         frame = cm(frame)
         frame = np.uint8(frame * 255)
         im = Image.fromarray(frame)
 
         drawObject = ImageDraw.Draw(im)
         box = (5, size_pix[0] - 5, size_pix[0] - 5, size_pix[1] - 10)
-        bar = (5, size_pix[0] - 5, 5 + (size_pix[0] - 10) * i / n_frames, size_pix[1] - 10)
-        drawObject.rectangle(box, outline= bg_color)
+        bar = (5, size_pix[0] - 5, 5 + (size_pix[0] - 10) * i / (n_frames - 1), size_pix[1] - 10)
+        drawObject.rectangle(box, outline=bg_color)
         drawObject.rectangle(bar, outline=bg_color, fill=bg_color)
         if progress_step is not None:
-            drawObject.text((5, size_pix[1] - 40), f'{progress_text} = {progress_step * i:.1f}', fill=bg_color, font=font)
+            add_time_bar(im, i, len(frames), progress_text, progress_step)
+            # drawObject.text((5, size_pix[1] - 40), f'{progress_text} = {progress_step * i:4.1f}', fill=bg_color, font=font)
+        if um_pix is not None:
+            add_scale_bar(im, um_pix, barsize_um=10)
 
         ims.append(im)
     ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
+
 
 def get_parameter(filename, section, item):
     # ConfigParser ingnores items containing '#'. Replace in log file and item name if neccesary.
@@ -477,40 +483,58 @@ def get_parameter(filename, section, item):
         except ValueError:
             return value
 
+
 def process_folder(foldername):
     filenames = sorted(glob.glob(rf"{foldername}\image*.tiff"), key=tio.natural_keys)
     logfile = rf'{foldername}\{os.path.split(foldername)[-1]}.log'
+    file_nr = int(logfile.split('_')[-1].split('.')[0])
 
     # Create movie of MaxIntensity stacks
     stack_size = int(get_parameter(logfile, 'Step settings', '#z steps'))
+    um_pix = 0.26
+    if file_nr > 21:
+    # um_pix *= 25/60
+    #
+    # if file_nr != 35:
+    #     return
+
     LED_on = bool(get_parameter(logfile, 'Excitation', 'LED (V)'))
     dt = get_parameter(logfile, 'Timing', 'Repetition time (s)') * stack_size
-    z_range = [120, 500]
+    z_range = [100, 300]
 
     filenames = np.array(filenames).reshape(len(filenames) // stack_size, stack_size)
-    filename_out = rf'{foldername}\timeseries.gif'
+    filename_out = rf'{foldername}\{os.path.split(foldername)[-1]}_timeseries.gif'
     frames = []
     for stack in filenames:
         print(f'{stack[0]} > {filename_out}')
         if LED_on: stack = stack[1:]
         frames.append(aggregate_images(stack, 'max'))
-    save_gif(filename_out, frames, progress_text='t (s)', progress_step=dt, z_range=z_range)
+    save_gif(filename_out, frames, progress_text='t (s)', progress_step=dt, z_range=z_range, um_pix=um_pix)
 
     # Create movie of MaxIntensity stacks
-    filename_out = rf'{foldername}\zstack.gif'
+    filename_out = rf'{foldername}\{os.path.split(foldername)[-1]}_zstack.gif'
     z_step = int(get_parameter(logfile, 'Step settings', 'z step (um)'))
     frames = []
     for filename in filenames[0]:
         print(f'{stack[0]} > {filename_out}')
         frames.append(np.asarray(plt.imread(filename)).T.astype(float))
-    save_gif(filename_out, frames, progress_text='z (um)', progress_step=z_step, z_range=z_range)
+    save_gif(filename_out, frames, progress_text='z (um)', progress_step=z_step, z_range=z_range, um_pix=um_pix)
+
 
 if __name__ == "__main__":
     # files = r'N:\Redmar\SLIM_data\data_032\image*.tiff'
     foldername = r'C:\MeasurementData\201218\data_008'
 
     foldername = r'D:\MeasurementData\201222 - Pollen with Charlotte\data_035'
-    process_folder(foldername)
+    # process_folder(foldername)
+
+    foldername = r'D:\MeasurementData\201222 - Pollen with Charlotte/'
+    folders = os.listdir(foldername)
+    for f in folders:
+        try:
+            process_folder(foldername + f)
+        except:
+            pass
 
     if False:
         im = process_2p(filenames)
