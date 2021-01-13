@@ -1,14 +1,13 @@
 import numpy as np
 from scipy import fftpack
 import matplotlib.pyplot as plt
-
-import glob, os, re, sys
+import glob, os, re, sys, configparser
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageSequence, TiffImagePlugin
 
 sys.path.append(r'C:\Users\noort\PycharmProjects\TraceEditor')
-
 import TraceIO as tio
+
 
 photons_e = 3.0
 font = ImageFont.truetype('arial', 25)
@@ -428,9 +427,9 @@ def process_2p(filenames):
     return im
 
 
-def save_with_fps(filename, frames, fps = 5, z_range = [120, 200], progress_text = '', stepsize = None):
+def save_gif(filename, frames, fps = 5, z_range = [120, 200], progress_text ='', progress_step = None):
     filename = tio.change_extension(filename, 'gif')
-    cm = plt.get_cmap('afmhot')
+    cm = plt.get_cmap('hot')
     bg_color = (255,255,255)
     size_pix = np.shape(frames[0])
     n_frames = len(frames)
@@ -446,35 +445,72 @@ def save_with_fps(filename, frames, fps = 5, z_range = [120, 200], progress_text
         bar = (5, size_pix[0] - 5, 5 + (size_pix[0] - 10) * i / n_frames, size_pix[1] - 10)
         drawObject.rectangle(box, outline= bg_color)
         drawObject.rectangle(bar, outline=bg_color, fill=bg_color)
-        if stepsize is not None:
-            drawObject.text((5, size_pix[1] - 40), f'{progress_text} = {stepsize * i:.1f}', fill=bg_color, font=font)
+        if progress_step is not None:
+            drawObject.text((5, size_pix[1] - 40), f'{progress_text} = {progress_step * i:.1f}', fill=bg_color, font=font)
 
         ims.append(im)
     ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
 
+def get_parameter(filename, section, item):
+    # ConfigParser ingnores items containing '#'. Replace in log file and item name if neccesary.
+    if item[:1] == 'N ':
+        item = item.replace('N ', '#')
+    if '#' in item:
+        print(f'Warning: "#" in file {filename} not compatible with Python ConfigParser. Replaced # with "N ".')
+        with open(filename, 'r') as file:
+            filedata = file.read()
+        filedata = filedata.replace('#', 'N ')
+        with open(filename, 'w') as file:
+            file.write(filedata)
+            print('replaced')
+    item = item.replace('#', 'N ')
 
+    config = configparser.ConfigParser()
+    config.read(filename)
+    value = config.get(section, item)
+
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+def process_folder(foldername):
+    filenames = sorted(glob.glob(rf"{foldername}\image*.tiff"), key=tio.natural_keys)
+    logfile = rf'{foldername}\{os.path.split(foldername)[-1]}.log'
+
+    # Create movie of MaxIntensity stacks
+    stack_size = int(get_parameter(logfile, 'Step settings', '#z steps'))
+    LED_on = bool(get_parameter(logfile, 'Excitation', 'LED (V)'))
+    dt = get_parameter(logfile, 'Timing', 'Repetition time (s)') * stack_size
+    z_range = [120, 500]
+
+    filenames = np.array(filenames).reshape(len(filenames) // stack_size, stack_size)
+    filename_out = rf'{foldername}\timeseries.gif'
+    frames = []
+    for stack in filenames:
+        print(f'{stack[0]} > {filename_out}')
+        if LED_on: stack = stack[1:]
+        frames.append(aggregate_images(stack, 'max'))
+    save_gif(filename_out, frames, progress_text='t (s)', progress_step=dt, z_range=z_range)
+
+    # Create movie of MaxIntensity stacks
+    filename_out = rf'{foldername}\zstack.gif'
+    z_step = int(get_parameter(logfile, 'Step settings', 'z step (um)'))
+    frames = []
+    for filename in filenames[0]:
+        print(f'{stack[0]} > {filename_out}')
+        frames.append(np.asarray(plt.imread(filename)).T.astype(float))
+    save_gif(filename_out, frames, progress_text='z (um)', progress_step=z_step, z_range=z_range)
 
 if __name__ == "__main__":
     # files = r'N:\Redmar\SLIM_data\data_032\image*.tiff'
     foldername = r'C:\MeasurementData\201218\data_008'
-    foldername = r'C:\MeasurementData\201222 - Pollen with Charlotte\data_030'
-    filenames = sorted(glob.glob(rf"{foldername}\image*.tiff"), key=tio.natural_keys)
-    nr = 50
 
-    stack_size = 20
-    filenames = np.array(filenames).reshape(len(filenames) // stack_size, stack_size)
-
-    frames = []
-    for stack in filenames:
-        print(stack[0])
-        frames.append(aggregate_images(stack, 'max'))
-    save_with_fps(rf'{foldername}\timeseries.gif', frames, progress_text= 't (s)', stepsize= 10)
-
-    frames = []
-    for filename in filenames[0]:
-        print(filename)
-        frames.append(np.asarray(plt.imread(filename)).T.astype(float))
-    save_with_fps(rf'{foldername}\zstack.gif', frames, progress_text= 'z (um)', stepsize= 2.5)
+    foldername = r'D:\MeasurementData\201222 - Pollen with Charlotte\data_035'
+    process_folder(foldername)
 
     if False:
         im = process_2p(filenames)

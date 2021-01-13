@@ -1,9 +1,8 @@
-from configparser import ConfigParser
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import interpolate
 import scipy.ndimage
-
+from configparser import ConfigParser
 
 def read_ini(filename):
     parser = ConfigParser()
@@ -14,7 +13,6 @@ def read_ini(filename):
         for item in parser.items(section):
             confdict[item[0]] = float(item[1])
     return confdict
-
 
 def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
     if kind == 'zero':
