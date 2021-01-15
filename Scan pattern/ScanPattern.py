@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 import scipy.ndimage
 from configparser import ConfigParser
+import ProcessImages.ImageIO as ioi
 
-def read_ini(filename):
+def read_all_parameters(filename):
     parser = ConfigParser()
     parser.read(filename)
     # confdict = {section: dict(parser.items(section)) for section in parser.sections()}
@@ -35,7 +36,7 @@ def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
     return x_array
 
 
-def check_image(channels, n_pix=300, n_spots=5, d_spots=40, pix_volt=70, frames=None):
+def check_image(channels, n_pix=300, n_spots=5, d_spots=30, pix_volt=70, frames=None):
     print('Reconstructing excitation image ...')
     w = 10
     x = np.asarray([list(range(n_pix))] * n_pix)
@@ -52,7 +53,7 @@ def check_image(channels, n_pix=300, n_spots=5, d_spots=40, pix_volt=70, frames=
 
     im2 = im * 0
     for i, x in enumerate(loc.T):
-        if i == 0:
+        if i == -1:
             im2 += scipy.ndimage.shift(-im, x)
         else:
             im2 += scipy.ndimage.shift(im, x)
@@ -72,7 +73,8 @@ def check_image(channels, n_pix=300, n_spots=5, d_spots=40, pix_volt=70, frames=
             print(f'Frame: {i}')
             for x in channels.T[f[0]:f[1]]:
                 im2 += scipy.ndimage.shift(im, pix_volt * x[:2])
-    plt.imshow(im2.T, origin='lower')
+    plt.imshow(im2.T, origin='lower', cmap='afmhot')
+    plt.colorbar()
     # plt.plot(im2)
     plt.show()
 
@@ -188,13 +190,14 @@ def create_signals(pars, show=False):
 
 
 def LV_create_scan_pattern(filename):
-    settings = read_ini(filename)
+    settings = read_all_parameters(filename)
     channels = create_signals(settings, show=False)
     return channels
 
 
 if __name__ == '__main__':
-    settings = read_ini(r'test.ini')
+    settings = read_all_parameters(r'test.ini')
+
     # for s in settings:
     #     print(s, settings[s])
     channels = create_signals(settings, show=True)
