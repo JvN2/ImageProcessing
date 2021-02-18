@@ -81,4 +81,4 @@ if __name__ == '__main__':
     filenames = select_frames(folder, [0, 10], stack_size=2, selection=[1])
     for f in filenames:
         print(f)
-    create_multi_tiff(folder, range=[90, 150], selection=None, stack_size=2)
+    create_multi_tiff(folder, stack_size=2, range=[90, 150], selection=None)
