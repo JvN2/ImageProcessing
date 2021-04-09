@@ -1,8 +1,6 @@
 from datetime import timedelta, datetime
 from pathlib import Path
 
-from microscopestitching import stitch
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -52,7 +50,7 @@ def read_log(filename):
     return settings
 
 
-def select_frames(df, slice=None, serie=None, tile=None):
+def select_frames(df, slice=None, serie=None, tile=None, frame=None):
     if slice is not None:
         if isinstance(slice, int):
             slice = [slice]
@@ -65,6 +63,10 @@ def select_frames(df, slice=None, serie=None, tile=None):
         if isinstance(tile, int):
             tile = [tile]
         df = df[df['Tile'].isin(tile)]
+    if frame is not None:
+        if isinstance(frame, int):
+            frame = [frame]
+        df = df[df['Frame'].isin(frame)]
     return df
 
 
@@ -135,7 +137,6 @@ def frames_to_gif(filename_out, df, fps=5, z_range=None, max_intensity=False):
             if frame is not None:
                 if z_range is None:
                     z_range = [np.percentile(frame, 2), 1.5 * np.percentile(frame, 99)]
-                # frame = np.uint8(np.clip((255 * (frame - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
                 image = Image.fromarray(scale_u8(frame))
                 add_scale_bar(image, 0.2)
                 add_time_bar(image, row['Time (s)'] - df['Time (s)'].min(), df['Time (s)'].max() - df['Time (s)'].min(),
@@ -147,88 +148,73 @@ def frames_to_gif(filename_out, df, fps=5, z_range=None, max_intensity=False):
     return filename_out
 
 
-def replace_roi(image, roi, center, max_intensity = True):
-    def _check_boundaries(i_size, i_coords, r_coords):
-        for axis in [0, 1]:
-            if i_coords[axis][0] < 0:
-                r_coords[axis][0] -= i_coords[axis][0]
-                i_coords[axis][0] = 0
-            if i_coords[axis][1] > i_size[axis]:
-                r_coords[axis][1] -= i_coords[axis][1] - i_size[axis]
-                i_coords[axis][1] = i_size[axis] - 1
-        return i_coords.astype(int), r_coords.astype(int)
+def replace_roi(image, roi, center, max_intensity=True):
+    x = ll = 0
+    y = ur = 1
 
-    def _get_roi(image, r_coords):
-        roi = image[r_coords[0][0]:r_coords[0][1], r_coords[1][0]:r_coords[1][1]]
-        return roi
+    def to_corners(center, width):
+        corners = [[int(c - w // 2), int(c - w // 2) + int(w)] for c, w in zip(center, width)]
+        return corners
 
-    center = np.asarray(center)
-    roi_size = np.asarray(np.shape(roi))
+    def clip_edges(image, corners, roi):
+        if corners[x][0] < 0:
+            roi = roi[-corners[x][0]:, :]
+            corners[x][0] = 0
+        if corners[y][0] < 0:
+            roi = roi[:, -corners[y][0]:]
+            corners[y][0] = 0
+        image_size = np.shape(image)
+        if corners[x][1] > image_size[x]:
+            roi = roi[0:image_size[x] - corners[x][1]:, :]
+            corners[x][1] = image_size[x]
+        if corners[y][1] > image_size[y]:
+            roi = roi[:, 0:image_size[y] - corners[y][1]]
+            corners[y][1] = image_size[y]
+        return corners, roi
 
-    r_coords = np.asarray([np.zeros(2), np.shape(roi)]).T
-    i_coords = np.asarray(center - roi_size / 2)
-    i_coords = np.append(i_coords, i_coords + roi_size)
-    i_coords = np.reshape(i_coords, (2, 2)).T
+    def get_roi(image, corners):
+        return image[corners[x][ll]:corners[x][ur], corners[y][ll]:corners[y][ur]]
 
-    i_coords, r_coords = _check_boundaries(np.shape(image), i_coords, r_coords)
+    corners = to_corners(center, np.shape(roi))
+    corners, roi = clip_edges(image, corners, roi)
 
     if max_intensity:
-        i_roi = _get_roi(image, i_coords)
-        print(f'r_coords:  {np.shape(i_roi)}')
-        print(f'i_coords:  {np.shape(i_roi)}')
-        roi = _get_roi(roi, r_coords)
-        selection = i_roi > roi
-        roi[selection] = i_roi[selection]
-        print(f'roi:  {np.shape(roi)}')
-        image[i_coords[0][0]:i_coords[0][1], i_coords[1][0]:i_coords[1][1]] = roi
-    else:
-        try:
-            image[i_coords[0][0]:i_coords[0][1], i_coords[1][0]:i_coords[1][1]] = \
-                roi[r_coords[0][0]:r_coords[0][1], r_coords[1][0]:r_coords[1][1]]
-        except ValueError:
-            print(f'center: {center}, imagesize: {np.shape(image)}, roisize: {np.shape(roi)}')
-            # print(f'r_coords: {r_coords}')
-            # print(f'i_coords: {i_coords}')
-            print(f'roi size: {np.shape(_get_roi(roi, r_coords))}')
-            print(f'image size: {np.shape(_get_roi(image, i_coords))}')
+        old_roi = get_roi(image, corners)
+        roi[old_roi > roi] = old_roi[old_roi > roi]
 
+    image[corners[x][ll]:corners[x][ur], corners[y][ll]:corners[y][ur]] = roi
     return image
 
 
-def stitch_mosacic(df, z_range=None, max_intensity = True):
-    correction = 2
+def stitch_mosaic(df, zrange=None):
     pixel_size = read_log(filenames[0])["Pixel size (um)"]
-    image_size = np.asarray(np.shape(plt.imread(Path(df['Filename'].iloc[0]))))//2
+    image_size = np.asarray(np.shape(plt.imread(Path(df['Filename'].iloc[0]))))
+    correction = 2
 
-    xy_range = np.asarray([df["Stepper x (um)"].max() - df["Stepper x (um)"].min(), \
-                           df["Stepper y (um)"].max() - df["Stepper y (um)"].min()])
-    xy_range *= correction
-    xy_range = np.asarray(xy_range) + pixel_size * image_size
-    xy_range = np.uint16(xy_range / pixel_size)
+    for i, axe in enumerate(['x', 'y']):
+        df[f'{axe} (pix)'] = correction * df[f'Stepper {axe} (um)'] / pixel_size
+        df[f'{axe} (pix)'] -= df[f'{axe} (pix)'].min()
+        df[f'{axe} (pix)'] += image_size[i] / 2
 
-    origin = np.asarray([df["Stepper x (um)"].min(), df["Stepper y (um)"].min()])
-    origin *= correction
+    mosaic = np.zeros(np.asarray((df['x (pix)'].max(), df['y (pix)'].max())).astype(int) + image_size // 2,
+                      dtype=np.uint8)
 
-    print(f'xy_range (pix) = {xy_range}')
-    print(f'image_size (pix) = {image_size}')
-    print(f'origin (um) = {origin}')
+    print(f'Stitching tiles ...')
+    print(f'n tiles  {df.shape[0]}')
+    print(f'pixel size (um) {pixel_size}')
+    print(f'mosaic_size (pix) {np.shape(mosaic)}')
 
+    range = pixel_size * np.asarray(np.shape(mosaic))
+    extent = np.asarray([0, range[0], 0, range[1]])
 
-    mosaic = np.zeros(xy_range, dtype=np.uint8)
-    for _, row in df.iterrows():
-        if Path(row['Filename']).is_file():
-            tile = np.asarray(plt.imread(row['Filename'])).T.astype(float)
-            if z_range is None:
-                z_range = np.asarray([0.5 * np.percentile(tile, 5), 1.5 * np.percentile(tile, 95)])
-            tile = np.transpose(scale_u8(tile, z_range=z_range))
+    for i, row in df.iterrows():
+        if zrange is None:
+            image = plt.imread(Path(row['Filename']))
+            zrange = [np.percentile(image, 5), 1.5 * np.percentile(image, 90)]
+        roi = scale_u8(plt.imread(Path(row['Filename'])), zrange)
+        mosaic = replace_roi(mosaic, roi, [row['x (pix)'], row['y (pix)']])
 
-            offset = np.asarray((row["Stepper x (um)"], row["Stepper y (um)"]))*correction
-            offset -= origin
-            print(f'offset (um) = {offset}')
-
-            mosaic = replace_roi(mosaic, tile, offset / pixel_size, max_intensity=True)
-
-    return mosaic
+    return mosaic, extent
 
 
 filename = r'C:\Data\noort\210316\data_023\data_023.dat'
@@ -241,14 +227,9 @@ filenames = [
 ]
 
 filenames = [r'C:\Users\jvann\Downloads\data_002.dat']
+filenames = [r'D:\Data\Noort\2photon\210406_grid_test\data_002\data_002.dat']
 
 df = read_dat(filenames)
-# plt.plot(df['Time (s)'], df['Tile'], 'o-', fillstyle=None)
-# plt.show()
-# print(df.columns)
-df = df[df['Frame'] == 0]
-df = df[df['Stepper y (um)'].between(-1800, -1300)]
-# df = df[:2]
 
 if 0:
     # read settings
@@ -264,13 +245,11 @@ if 0:
 
 if 1:
     # stitch mosaic
-    mosaic = stitch_mosacic(df)
+    df = select_frames(df, frame=1)
+    df['Stepper x (um)'] *= -1
+    mosaic, extent = stitch_mosaic(df)
     if mosaic is not None:
-        plt.imshow(mosaic.T, origin='lower', cmap='Greys')
-        print(f'mosaic (pix) {np.shape(mosaic)}')
+        plt.imshow(mosaic.T, origin='lower', cmap='Greys', extent=extent / 1000)
+        plt.xlabel('x (mm)')
+        plt.ylabel('y (mm)')
         plt.show()
-
-if 0:
-    image = replace_roi(np.zeros((100, 100)), np.ones((10, 20)), [0, 5], max_intensity=True)
-    plt.imshow(image.T, origin='lower', cmap='Greys')
-    plt.show()
