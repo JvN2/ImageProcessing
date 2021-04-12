@@ -189,10 +189,9 @@ def replace_roi(image, roi, center, max_intensity=True):
 def stitch_mosaic(df, zrange=None):
     pixel_size = read_log(filenames[0])["Pixel size (um)"]
     image_size = np.asarray(np.shape(plt.imread(Path(df['Filename'].iloc[0]))))
-    correction = 2
 
     for i, axe in enumerate(['x', 'y']):
-        df[f'{axe} (pix)'] = correction * df[f'Stepper {axe} (um)'] / pixel_size
+        df[f'{axe} (pix)'] = df[f'Stepper {axe} (um)'] / pixel_size
         df[f'{axe} (pix)'] -= df[f'{axe} (pix)'].min()
         df[f'{axe} (pix)'] += image_size[i] / 2
 
@@ -205,12 +204,16 @@ def stitch_mosaic(df, zrange=None):
     print(f'mosaic_size (pix) {np.shape(mosaic)}')
 
     range = pixel_size * np.asarray(np.shape(mosaic))
-    extent = np.asarray([0, range[0], 0, range[1]])
+    extent = [df['Stepper x (um)'].min() - pixel_size * image_size[0] / 2,
+              df['Stepper x (um)'].max() + pixel_size * image_size[0] / 2,
+              df['Stepper y (um)'].min() - pixel_size * image_size[1] / 2,
+              df['Stepper y (um)'].max() + pixel_size * image_size[1] / 2]
+    extent = np.asarray(extent)
 
     for i, row in df.iterrows():
         if zrange is None:
             image = plt.imread(Path(row['Filename']))
-            zrange = [np.percentile(image, 5), 1.5 * np.percentile(image, 90)]
+            zrange = [np.percentile(image, 5), 2 * np.percentile(image, 90)]
         roi = scale_u8(plt.imread(Path(row['Filename'])), zrange)
         mosaic = replace_roi(mosaic, roi, [row['x (pix)'], row['y (pix)']])
 
@@ -227,7 +230,10 @@ filenames = [
 ]
 
 filenames = [r'C:\Users\jvann\Downloads\data_002.dat']
+
+filenr = '042'
 filenames = [r'D:\Data\Noort\2photon\210406_grid_test\data_002\data_002.dat']
+filenames = [rf'C:\Data\noort\210412\data_{filenr}\data_{filenr}.dat']
 
 df = read_dat(filenames)
 
@@ -245,11 +251,9 @@ if 0:
 
 if 1:
     # stitch mosaic
-    df = select_frames(df, frame=1)
-    df['Stepper x (um)'] *= -1
-    mosaic, extent = stitch_mosaic(df)
+    mosaic, extent = stitch_mosaic(select_frames(df, frame=0, slice=1))
     if mosaic is not None:
-        plt.imshow(mosaic.T, origin='lower', cmap='Greys', extent=extent / 1000)
-        plt.xlabel('x (mm)')
-        plt.ylabel('y (mm)')
+        plt.imshow(mosaic.T, origin='lower', cmap='gray', extent=extent)
+        plt.xlabel('x (um)')
+        plt.ylabel('y (um)')
         plt.show()
