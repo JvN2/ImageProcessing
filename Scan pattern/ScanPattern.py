@@ -3,17 +3,26 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 import scipy.ndimage
 from configparser import ConfigParser
-import ProcessImages.ImageIO as ioi
 
-def read_all_parameters(filename):
-    parser = ConfigParser()
-    parser.read(filename)
-    # confdict = {section: dict(parser.items(section)) for section in parser.sections()}
-    confdict = {}
-    for section in parser.sections():
-        for item in parser.items(section):
-            confdict[item[0]] = float(item[1])
-    return confdict
+
+def read_log(filename):
+    if '.log' not in filename:
+        filename = filename.split('.')[0] + '.log'
+    keys = ['LED (V)', 'Pixel size (um)', 'Z step (um)', 'Magnification', 'Exposure (s)', 'Wavelength (nm)', 'T0 (ms)',
+            'Slice (s)', 'DAQ rate (Hz)', 'Transition (s)', 'Sigma', 'A spiral (V)', 'SLIM', 'Spirals', 'Steps',
+            'Z step (um)', 'UV (%)', 'Shutter delay (s)', 'xc (v)', 'yc (v)', 'x0 (v)', 'y0 (v)', 'z0 (v)']
+    settings = {}
+    for key in keys:
+        settings[key] = 0
+
+    with open(filename) as reader:
+        for line in reader:
+            for key in keys:
+                if key in line:
+                    settings[key] = float(line.split('=')[-1])
+
+    return settings
+
 
 def add_transition(x_start, x_array, x_end, n, kind='quadratic'):
     if kind == 'zero':
@@ -79,23 +88,24 @@ def check_image(channels, n_pix=300, n_spots=5, d_spots=30, pix_volt=70, frames=
     plt.show()
 
 
-def create_signals(pars, show=False):
-    t = np.arange(0, pars['exposure (s)'], 1.0 / pars['daq rate (hz)'])
-    n_slice = int(pars['slice (s)'] * pars['daq rate (hz)'])
-    n_transition = int(pars['ramp time (s)'] * pars['daq rate (hz)'])
+def create_signals(filename, show=False):
+    pars = read_log(filename)
+    t = np.arange(0, pars['Exposure (s)'], 1.0 / pars['DAQ rate (Hz)'])
+    n_slice = int(pars['Slice (s)'] * pars['DAQ rate (Hz)'])
+    n_transition = int(pars['Transition (s)'] * pars['DAQ rate (Hz)'])
     n_active = len(t) + 2 * n_transition
     n_slice = np.max([n_slice, n_active])
     n_pwm = 50
 
-    tau = np.sqrt(t / pars['exposure (s)']) * np.exp(((t / pars['exposure (s)']) ** 2 - 1) / (2 * pars['sigma']))
-    if pars['slim'] == 0:
-        x = 0.455*pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau) + pars['xc (v)']
-        y = 0.455*pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau) + pars['yc (v)']
+    tau = np.sqrt(t / pars['Exposure (s)']) * np.exp(((t / pars['Exposure (s)']) ** 2 - 1) / (2 * pars['Sigma']))
+    if pars['SLIM'] == 0:
+        x = 0.455 * pars['A spiral (V)'] * tau * np.sin(np.pi * 2 * pars['Spirals'] * tau) + pars['xc (v)']
+        y = 0.455 * pars['A spiral (V)'] * tau * np.cos(np.pi * 2 * pars['Spirals'] * tau) + pars['yc (v)']
         c_block = [add_transition(0, np.ones_like(x), 0, n_transition, kind='zero')]
         x_block = [add_transition(pars['x0 (v)'], x, pars['x0 (v)'], n_transition)]
         y_block = [add_transition(pars['y0 (v)'], y, pars['y0 (v)'], n_transition)]
     else:
-        for phase in range(int(pars['slim'])):
+        for phase in range(int(pars['SLIM'])):
             x = pars['a spiral (v)'] * tau * np.sin(np.pi * 2 * pars['n spirals'] * tau)
             # y = 0.15 * pars['a spiral (v)'] * tau * np.cos(np.pi * 2 * pars['n spirals'] * tau)
             y = 0.5 * np.ones_like(x) * phase / int(pars['slim'])
@@ -108,11 +118,11 @@ def create_signals(pars, show=False):
             x /= np.max(x)
             x *= a
             x = np.roll(x, len(t) // 2)
-            x = np.linspace(a, -a, len(x) )
+            x = np.linspace(a, -a, len(x))
 
             tmp = x
             angle = np.pi / 6
-            angle = -np.pi/2
+            angle = -np.pi / 2
             # angle = (5/6) *np.pi
             x = np.cos(angle) * x + np.sin(angle) * y
             y = np.sin(angle) * tmp + np.cos(angle) * y
@@ -132,7 +142,7 @@ def create_signals(pars, show=False):
     ones = np.ones_like(x)
 
     channels = ['X (V)', 'Y (V)', 'Z (V)', 'LED (V)', 'Camera', 'UV']
-    for step in range(int(pars['nsteps'])):
+    for step in range(int(pars['Steps'])):
         for x, y, c in zip(x_block, y_block, c_block):
             new_block = np.zeros([len(channels), n_slice])
             new_block[channels.index('X (V)')][:n_active] = x
@@ -142,12 +152,12 @@ def create_signals(pars, show=False):
 
             new_block[channels.index('Z (V)')][:n_active] = add_transition(
                 pars['z0 (v)'],
-                ones * (step + 1) * pars['zstep (v)'],
+                ones * step * pars['Z step (um)'],
                 pars['z0 (v)'], n_transition)
             new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
 
             new_block[channels.index('Camera')][:n_active] = c
-            pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['uv (%)'] / 100
+            pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['UV (%)']
             new_block[channels.index('UV')] = pwm
             new_block[channels.index('UV')][:n_active] = 0
 
@@ -156,22 +166,22 @@ def create_signals(pars, show=False):
             except UnboundLocalError:
                 block = np.asarray(new_block)
 
-    if pars['led (v)'] > 0:
+    if pars['LED (V)'] > 0:
         new_block = np.zeros([len(channels), n_slice])
         new_block[channels.index('X (V)')] = pars['x0 (v)']
         new_block[channels.index('Y (V)')] = pars['y0 (v)']
         new_block[channels.index('Z (V)')][:n_active] = add_transition(
             pars['z0 (v)'],
-            ones * pars['zstep (v)'],
+            ones * pars['z0 (v)'],
             pars['z0 (v)'], n_transition)
         new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
 
         new_block[channels.index('Camera')][:n_active] = c
-        pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['uv (%)'] / 100
+        pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['UV (%)']
         new_block[channels.index('UV')] = pwm
         new_block[channels.index('UV')][:n_active] = 0
-        pwm = np.asarray(range(len(ones))) % n_pwm < n_pwm * pars['led (v)'] / 5
-        new_block[channels.index('LED (V)')][n_transition: n_transition + len(ones)] = 5 * pwm
+        pwm = np.asarray(range(len(ones))) % n_pwm < n_pwm * pars['LED (V)'] / 5
+        new_block[channels.index('LED (V)')][n_transition: n_transition + len(ones)] = pwm
         try:
             block = np.append(new_block, block, axis=1)
         except ValueError:
@@ -196,12 +206,15 @@ def LV_create_scan_pattern(filename):
 
 
 if __name__ == '__main__':
-    settings = read_all_parameters(r'test.ini')
+    filename = r'test.ini'
+    filename = r'C:\Data\noort\210419\data_002\data_002.log'
 
+    # settings = read_log(filename)
     # for s in settings:
     #     print(s, settings[s])
-    channels = create_signals(settings, show=True)
-    check_image(channels, frames=[0,1,2])
+    channels = create_signals(filename, show=True)
+
+    # check_image(channels, frames=[0,1,2])
     # print(LV_create_scan_pattern(r'C:\Users\noort\PycharmProjects\2Photon-microscope\Scan pattern\test.ini'))
     # x = []
     # x = safe_append(x, np.linspace(5, 10,5))

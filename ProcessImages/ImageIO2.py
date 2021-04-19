@@ -231,9 +231,9 @@ filenames = [
 
 filenames = [r'C:\Users\jvann\Downloads\data_002.dat']
 
-filenr = '042'
+filenr = '025'
 filenames = [r'D:\Data\Noort\2photon\210406_grid_test\data_002\data_002.dat']
-filenames = [rf'C:\Data\noort\210412\data_{filenr}\data_{filenr}.dat']
+filenames = [rf'C:\Data\noort\210413\data_{filenr}\data_{filenr}.dat']
 
 df = read_dat(filenames)
 
