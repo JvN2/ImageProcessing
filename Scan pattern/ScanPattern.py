@@ -120,12 +120,10 @@ def create_signals(filename, show=False):
             x = np.roll(x, len(t) // 2)
             x = np.linspace(a, -a, len(x))
 
-            tmp = x
-            angle = np.pi / 6
             angle = -np.pi / 2
-            # angle = (5/6) *np.pi
+
             x = np.cos(angle) * x + np.sin(angle) * y
-            y = np.sin(angle) * tmp + np.cos(angle) * y
+            y = np.sin(angle) * x + np.cos(angle) * y
 
             x += pars['xc (v)']
             y += pars['yc (v)']
@@ -141,7 +139,7 @@ def create_signals(filename, show=False):
 
     ones = np.ones_like(x)
 
-    channels = ['X (V)', 'Y (V)', 'Z (V)', 'LED (V)', 'Camera', 'UV']
+    channels = ['X (V)', 'Y (V)', 'Z (V)', 'Shutter', 'Camera', 'LED', 'UV']
     for step in range(int(pars['Steps'])):
         for x, y, c in zip(x_block, y_block, c_block):
             new_block = np.zeros([len(channels), n_slice])
@@ -160,6 +158,9 @@ def create_signals(filename, show=False):
             pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['UV (%)']
             new_block[channels.index('UV')] = pwm
             new_block[channels.index('UV')][:n_active] = 0
+
+            shutter_delay = np.min([n_transition ,pars['DAQ rate (Hz)']*pars['Shutter delay (s)']])
+            new_block[channels.index('Shutter')][:n_active] = np.roll(c, -int(shutter_delay))
 
             try:
                 block = np.append(block, new_block, axis=1)
@@ -181,26 +182,22 @@ def create_signals(filename, show=False):
         new_block[channels.index('UV')] = pwm
         new_block[channels.index('UV')][:n_active] = 0
         pwm = np.asarray(range(len(ones))) % n_pwm < n_pwm * pars['LED (V)'] / 5
-        new_block[channels.index('LED (V)')][n_transition: n_transition + len(ones)] = pwm
+        new_block[channels.index('LED')][n_transition: n_transition + len(ones)] = pwm
         try:
             block = np.append(new_block, block, axis=1)
         except ValueError:
             block = np.asarray(new_block)
 
-    # plt.scatter(block[channels.index('X (V)')], block[channels.index('Y (V)')], marker='.')
-    # plt.xlim([-1, 1])
-    # plt.ylim([-1, 1])
-    # plt.show()
 
     if show:
         plt.plot(block.T)
         plt.legend(channels)
         plt.show()
-    return block
+    return block, channels
 
 
 def LV_create_scan_pattern(filename):
-    settings = read_all_parameters(filename)
+    settings = read_log(filename)
     channels = create_signals(settings, show=False)
     return channels
 
@@ -212,7 +209,7 @@ if __name__ == '__main__':
     # settings = read_log(filename)
     # for s in settings:
     #     print(s, settings[s])
-    channels = create_signals(filename, show=True)
+    channels, _ = create_signals(filename, show=True)
 
     # check_image(channels, frames=[0,1,2])
     # print(LV_create_scan_pattern(r'C:\Users\noort\PycharmProjects\2Photon-microscope\Scan pattern\test.ini'))
