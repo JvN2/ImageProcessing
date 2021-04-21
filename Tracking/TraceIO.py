@@ -7,7 +7,7 @@ import os, re, time, configparser
 from datetime import datetime
 import pandas as pd
 import h5py
-import warnings, tables
+#import warnings, tables
 from mpl_toolkits.axes_grid1 import Divider, Size
 from nptdms import TdmsFile
 import glob
@@ -18,7 +18,7 @@ from pathlib import Path
 import ForceSpectroscopy as fs
 
 # Allow for spaces in column names
-warnings.simplefilter('ignore', tables.NaturalNameWarning)
+#warnings.simplefilter('ignore', tables.NaturalNameWarning)
 
 DELIMITER = ' > '
 
