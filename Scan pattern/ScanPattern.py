@@ -5,7 +5,7 @@ import scipy.ndimage
 from configparser import ConfigParser
 
 
-def read_log(filename):
+def read_log(filename, show = False):
     if '.log' not in filename:
         filename = filename.split('.')[0] + '.log'
     keys = ['LED (V)', 'Pixel size (um)', 'Z step (um)', 'Magnification', 'Exposure (s)', 'Wavelength (nm)', 'T0 (ms)',
@@ -20,6 +20,10 @@ def read_log(filename):
             for key in keys:
                 if key in line:
                     settings[key] = float(line.split('=')[-1])
+
+    if show:
+        for key in settings:
+            print(f'{key} = {settings[key]}')
 
     return settings
 
@@ -89,7 +93,7 @@ def check_image(channels, n_pix=300, n_spots=5, d_spots=30, pix_volt=70, frames=
 
 
 def create_signals(filename, show=False):
-    pars = read_log(filename)
+    pars = read_log(filename, show)
     t = np.arange(0, pars['Exposure (s)'], 1.0 / pars['DAQ rate (Hz)'])
     n_slice = int(pars['Slice (s)'] * pars['DAQ rate (Hz)'])
     n_transition = int(pars['Transition (s)'] * pars['DAQ rate (Hz)'])
@@ -140,8 +144,7 @@ def create_signals(filename, show=False):
 
     ones = np.ones_like(x)
 
-
-    channels = ['X (V)', 'Y (V)', 'Z (V)', 'Shutter', 'Camera', 'LED', 'UV']
+    channels = ['X (V)', 'Y (V)', 'Z (V)', 'Camera', 'Shutter', 'LED', 'UV']
     for step in range(int(pars['Steps'])):
         for x, y, c in zip(x_block, y_block, c_block):
             new_block = np.zeros([len(channels), n_slice])
@@ -161,7 +164,7 @@ def create_signals(filename, show=False):
             new_block[channels.index('UV')] = pwm
             new_block[channels.index('UV')][:n_active] = 0
 
-            shutter_delay = np.min([n_transition ,pars['DAQ rate (Hz)']*pars['Shutter delay (s)']])
+            shutter_delay = np.min([n_transition, pars['DAQ rate (Hz)'] * pars['Shutter delay (s)']])
             new_block[channels.index('Shutter')][:n_active] = np.roll(c, -int(shutter_delay))
 
             try:
@@ -179,7 +182,7 @@ def create_signals(filename, show=False):
             pars['z0 (v)'], n_transition)
         new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
 
-        new_block[channels.index('Camera')][:n_active] = 1
+        new_block[channels.index('Camera')][n_transition: n_transition + len(ones)] = 1
         pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['UV (%)']
         new_block[channels.index('UV')] = pwm
         new_block[channels.index('UV')][:n_active] = 0
@@ -190,11 +193,16 @@ def create_signals(filename, show=False):
         except (ValueError, UnboundLocalError) as e:
             block = np.asarray(new_block)
 
-
     if show:
-        plt.plot(block.T)
-        plt.legend(channels)
+        colors = ['black', 'red', 'blue', 'green', 'yellow', 'purple', 'cyan']
+        fig, axs = plt.subplots(len(block))
+        i = 0
+        for s, c, l in zip(block, colors, channels):
+            axs[i].plot(s, color=c)
+            axs[i].set_ylabel(l)
+            i+=1
         plt.show()
+
     return block, channels
 
 
@@ -205,13 +213,11 @@ def LV_create_scan_pattern(filename):
 
 
 if __name__ == '__main__':
-
-    filenr = '002'
+    filenr = '001'
     filename = rf'C:\Data\noort\210422\data_{filenr}\data_{filenr}.dat'
 
-    # settings = read_log(filename)
-    # for s in settings:
-    #     print(s, settings[s])
+    # settings = read_log(filename, True)
+
     channels, _ = create_signals(filename, show=True)
 
     # check_image(channels, frames=[0,1,2])
