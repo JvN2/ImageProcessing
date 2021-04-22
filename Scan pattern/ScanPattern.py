@@ -95,6 +95,7 @@ def create_signals(filename, show=False):
     n_transition = int(pars['Transition (s)'] * pars['DAQ rate (Hz)'])
     n_active = len(t) + 2 * n_transition
     n_slice = np.max([n_slice, n_active])
+
     n_pwm = 50
 
     tau = np.sqrt(t / pars['Exposure (s)']) * np.exp(((t / pars['Exposure (s)']) ** 2 - 1) / (2 * pars['Sigma']))
@@ -139,6 +140,7 @@ def create_signals(filename, show=False):
 
     ones = np.ones_like(x)
 
+
     channels = ['X (V)', 'Y (V)', 'Z (V)', 'Shutter', 'Camera', 'LED', 'UV']
     for step in range(int(pars['Steps'])):
         for x, y, c in zip(x_block, y_block, c_block):
@@ -177,7 +179,7 @@ def create_signals(filename, show=False):
             pars['z0 (v)'], n_transition)
         new_block[channels.index('Z (V)')][n_active:] = pars['z0 (v)']
 
-        new_block[channels.index('Camera')][:n_active] = c
+        new_block[channels.index('Camera')][:n_active] = 1
         pwm = np.asarray(range(len(new_block[0]))) % n_pwm < n_pwm * pars['UV (%)']
         new_block[channels.index('UV')] = pwm
         new_block[channels.index('UV')][:n_active] = 0
@@ -185,7 +187,7 @@ def create_signals(filename, show=False):
         new_block[channels.index('LED')][n_transition: n_transition + len(ones)] = pwm
         try:
             block = np.append(new_block, block, axis=1)
-        except ValueError:
+        except (ValueError, UnboundLocalError) as e:
             block = np.asarray(new_block)
 
 
@@ -203,8 +205,9 @@ def LV_create_scan_pattern(filename):
 
 
 if __name__ == '__main__':
-    filename = r'test.ini'
-    filename = r'C:\Data\noort\210419\data_002\data_002.log'
+
+    filenr = '002'
+    filename = rf'C:\Data\noort\210422\data_{filenr}\data_{filenr}.dat'
 
     # settings = read_log(filename)
     # for s in settings:

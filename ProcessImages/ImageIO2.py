@@ -231,9 +231,11 @@ filenames = [
 
 filenames = [r'C:\Users\jvann\Downloads\data_002.dat']
 
-filenr = '025'
+filenr = '001'
 filenames = [r'D:\Data\Noort\2photon\210406_grid_test\data_002\data_002.dat']
-filenames = [rf'C:\Data\noort\210413\data_{filenr}\data_{filenr}.dat']
+filenames = [rf'C:\Data\noort\210422\data_{filenr}\data_{filenr}.dat']
+
+
 
 df = read_dat(filenames)
 
@@ -251,7 +253,7 @@ if 0:
 
 if 1:
     # stitch mosaic
-    mosaic, extent = stitch_mosaic(select_frames(df, frame=0, slice=1))
+    mosaic, extent = stitch_mosaic(select_frames(df, frame=0, slice=0))
     if mosaic is not None:
         plt.imshow(mosaic.T, origin='lower', cmap='gray', extent=extent)
         plt.xlabel('x (um)')
