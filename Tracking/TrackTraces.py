@@ -108,7 +108,7 @@ def link_peaks(df, image, n_image, max_dist=5, show=False):
             pp_df.loc[int(no_trace[no_peak_num]), 'tracenr'] = new_trace_nr + no_peak_num
     if show:
         Ef.plot_link_traces(image, pp_df)
-    pp_df.to_csv('dataset_linkpeaks_v2.csv', index=False)
+    pp_df.to_csv('dataset_linkpeaks.csv', index=False)
     return pp_df
 
 def link_traces(df, image, show=False, max_dist=5):
@@ -135,43 +135,27 @@ def link_traces(df, image, show=False, max_dist=5):
     return pp_df
 
 ## Functions for analysis trajectories
-def MSD_traj(traj_df, diffusie_df,tracenr,cf_pos, cf_time, show =False):
+def MSD_traj(traj_df, tracenr,cf_pos, cf_time, show =False):
     trace_df_traj = traj_df.loc[traj_df['tracenr'] == tracenr]
     n_steps =len(trace_df_traj)
-    steps = range(1,n_steps)
+    steps = range(1, n_steps)
     MSD_array=np.zeros((4, n_steps))
-    xcoords = trace_df_traj.loc[:, 'x (pix)']
-    ycoords = trace_df_traj.loc[:, 'y (pix)']
-    rad = np.sqrt(xcoords ** 2 + ycoords ** 2)
-    coordsxy = np.append([rad],[xcoords], axis=0)
-    coordsxy = np.append(coordsxy, [ycoords], axis=0)
+    xcoords = trace_df_traj.loc[:, 'x (pix)']*cf_pos
+    ycoords = trace_df_traj.loc[:, 'y (pix)']*cf_pos
+    coordsxy = np.append([xcoords],[ycoords], axis=0)
     for step in steps:
-        a =np.mean(trace_df_traj.loc[trace_df_traj.index[step]:,'Filenr'].values-trace_df_traj.loc[:trace_df_traj.index[-1-step],'Filenr'].values)
-        MSD_array[0, step] =a
-        i =1
-        for axis in [coordsxy[0],coordsxy[1], coordsxy[2]]:
-            b =np.mean((axis[step:]-axis[:-step])**2)
-            MSD_array[i, step] = b
+        tau =np.mean(trace_df_traj.loc[trace_df_traj.index[step]:,'Filenr'].values-trace_df_traj.loc[:trace_df_traj.index[-1-step],'Filenr'].values)*cf_time
+        MSD_array[0, step] =tau
+        i =2
+        for axis in [coordsxy[0],coordsxy[1]]:
+            displacement =np.mean((axis[step:]-axis[:-step])**2)
+            MSD_array[i, step] = displacement
             i+=1
+        MSD_array[1,step] = MSD_array[2,step]+MSD_array[3,step]
     if show:
-        Ef.plot_MSD(MSD_array)
-
-    return MSD_array
-
-
-
-def diffusie(traj_df,diffusie_df,tracenr):
-    MSD_array = MSD_traj(traj_df, diffusie_df, tracenr, 0.26, 0.4, show=False)
-    index = np.where([diffusie_df['tracenr'] == tracenr][0])[0]
-    tau = np.mean(MSD_array[0])
-    MSDxy = np.mean(MSD_array[1])
-    MSDx= np.mean(MSD_array[2])
-    MSDy=np.mean(MSD_array[3])
-    diffusie_df.loc[index, 'Tau (s)'] = tau
-    diffusie_df.loc[index, 'MSDxy'] = MSDxy
-    diffusie_df.loc[index, 'MSDx'] = MSDx
-    diffusie_df.loc[index, 'MSDy'] = MSDy
-    return diffusie_df
+        Ef.plot_MSD(MSD_array, tracenr)
+    MSD_df=pd.DataFrame(MSD_array.T,columns=  [fr'Tau{tracenr}', fr'MSDxy{tracenr}', fr'MSDx{tracenr}', fr'MSDy{tracenr}'] )
+    return MSD_df
 
 ##Analyse, image, images, dataset and trajectories
 def analyse_image(image, file_nr, filefolder,filename, highpass=4, lowpass=1, show=False):
@@ -184,7 +168,7 @@ def analyse_image(image, file_nr, filefolder,filename, highpass=4, lowpass=1, sh
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting = False, show=False)
+        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting = True, show=True)
     pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename','Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'amplitude (a.u.)', 'error x (pix)', 'error y (pix)', 'error sigma (pix)', 'error amplitude (a.u.)' ))
     return pp_dataframe, filtered_image, cleared_image
 
@@ -192,7 +176,7 @@ def analyse_images(files, first_im, last_im, filefolder):
     empty_pp_df =[]
     for num, file in enumerate(files[first_im:last_im]):
         image = np.asarray(tiff.imread(file).astype(float)[200:800, 200:800])
-        pp_df, filtered_image, cleared_image = analyse_image(image,num, filefolder,file, show=False)
+        pp_df, filtered_image, cleared_image = analyse_image(image,num, filefolder,file, show=True)
         empty_pp_df.append(pp_df)
     all_pp_df =pd.concat(empty_pp_df, ignore_index=False)
     all_pp_df.to_csv('dataset_pp_v2.csv',index=False)
@@ -214,37 +198,36 @@ def analyse_dataset(df, files):
     link_df = link_df_old.copy()
     for i in range(4):
         link_df =link_traces(link_df, image, show=False)
-        link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
+        link_df.to_csv(fr'dataset_linktraces_loop{i}.csv', index=False)
     trace_df = link_df
-    trace_df.to_csv('dataset_final_loop_v2.csv', index=False)
+    trace_df.to_csv('dataset_final_loop.csv', index=False)
     return link_df_old, trace_df
 
 def analyse_trajectories(df):
     traj_df=pd.read_csv(df)
     range_traces = []
     [range_traces.append(i) for i in traj_df.loc[:, 'tracenr'].to_numpy() if i not in range_traces]
-    for i in np.asarray(range_traces):
-        tracenr_df=traj_df.loc[traj_df.loc[:,'tracenr'] == i]
-        if len(tracenr_df)<2:
-            range_traces=np.delete(range_traces,np.where(range_traces==i))
-    diffusie_array = [np.append(p,[-2,-3,-4 ]) for p in [np.append([-1],p) for p in range_traces]]
-    diffusie_df = pd.DataFrame(diffusie_array, columns=( 'Tau (s)', 'tracenr', 'MSDxy', 'MSDx','MSDy'))
     for i in range_traces:
-        diffusie_df = diffusie(traj_df,diffusie_df, i)
+        if len(traj_df.loc[traj_df['tracenr']==i])<3:
+            range_traces=np.delete(np.asarray(range_traces),np.where(range_traces==i)[0])
+    empty_df=[]
+    for i in range_traces:
+        MSD_df = MSD_traj(traj_df, i, 0.26, 0.4, show=False)
+        empty_df.append(MSD_df)
+    diffusie_df = pd.concat(empty_df, ignore_index=False, axis=1)
     #diffusie_df.to_csv('dataset_diffusie.csv', index=False)
     return
-
 
 treshold =7
 
 os.chdir(fr"C:\Users\Santen\Documents\Images\data_030XX")
 files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-dataset_for_analysis= fr"C:\Users\Santen\Documents\Images\data_030XX\dataset_final_loop_v2.csv"
+dataset_for_analysis= fr"C:\Users\Santen\Documents\Images\data_030XX\dataset_final_loop.csv"
 df=pd.read_csv(dataset_for_analysis)
 
 #analysis images,dataset and trajectories
 #analyse_images(files,0,29,fr"C:\Users\Santen\Documents\Images\data_030XX")
-#link_df, trace_df =analyse_dataset(fr"C:\Users\Santen\Documents\Images\data_030XX\dataset_pp_v2.csv", files)
+#link_df, trace_df =analyse_dataset(fr"C:\Users\Santen\Documents\Images\data_030XX\dataset_pp_v2.csv", files)#
 analyse_trajectories(dataset_for_analysis)
 
 ###validations functions
@@ -252,10 +235,10 @@ analyse_trajectories(dataset_for_analysis)
 #Ef.show_histogram_values(df,'amplitude (a.u.)', bins=np.linspace(20,150, 200))
 #Ef.show_histogram_values(df,"sigma (pix)" ,bins= "auto")
 #Ef.show_intensity_histogram_filename(files[2])
+
 ##plots
 select_image_df = int(df.loc[df['tracenr'] == 2]['Filenr'].max())
-#Ep.plot_full_tracjectory(2, files[select_image_df], df, df, select2=None, show=True)
-
-#Ef.plot_trajectory(df, i, 30)
+#Ef.plot_full_tracjectory(2, files[select_image_df], df, df, select2=None, show=True)
+#Ef.plot_trajectory(df, 0, 30)
 
 
