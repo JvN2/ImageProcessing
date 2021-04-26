@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tqdm
 from PIL import Image, ImageDraw, ImageFont
 
 font = ImageFont.truetype('arial', 25)
@@ -50,7 +51,7 @@ def read_log(filename):
     return settings
 
 
-def select_frames(df, slice=None, serie=None, tile=None, frame=None):
+def select_frames(df, slice=None, serie=None, tile=None, frame=None, folder=None):
     if slice is not None:
         if isinstance(slice, int):
             slice = [slice]
@@ -67,6 +68,13 @@ def select_frames(df, slice=None, serie=None, tile=None, frame=None):
         if isinstance(frame, int):
             frame = [frame]
         df = df[df['Frame'].isin(frame)]
+    if folder is not None:
+        if isinstance(folder, int):
+            folder = [folder]
+        selected = np.zeros(len(df))
+        for f in folder:
+            selected = np.logical_or(selected, df['Filename'].str.contains(fr'data_{f:03d}'))
+        df = df[selected]
     return df
 
 
@@ -114,14 +122,12 @@ def scale_u8(array, z_range=None):
 
 
 def frames_to_gif(filename_out, df, fps=5, z_range=None, max_intensity=False):
-    # filename_out = str(Path(filename_out))
-
     ims = []
     stack = []
     last_slice = df['Slice'].max()
     i = 0
 
-    for _, row in df.iterrows():
+    for _, row in tqdm.tqdm(df.iterrows()):
         filename = row['Filename']
         if Path(filename).is_file():
             frame = np.asarray(plt.imread(filename)).T.astype(float)
@@ -137,7 +143,7 @@ def frames_to_gif(filename_out, df, fps=5, z_range=None, max_intensity=False):
             if frame is not None:
                 if z_range is None:
                     z_range = [np.percentile(frame, 2), 1.5 * np.percentile(frame, 99)]
-                image = Image.fromarray(scale_u8(frame))
+                image = Image.fromarray(scale_u8(frame, z_range))
                 add_scale_bar(image, 0.2)
                 add_time_bar(image, row['Time (s)'] - df['Time (s)'].min(), df['Time (s)'].max() - df['Time (s)'].min(),
                              progress_text='t')
@@ -219,6 +225,41 @@ def stitch_mosaic(df, zrange=None):
 
     return mosaic, extent
 
+def merge_images(grey, red = None, green = None, blue = None):
+    if red is None:
+        red = grey
+    else:
+        red = scale_u8(red.astype(int) + grey.astype(int), z_range=[0, 255])
+
+    if green is None:
+        green = grey
+    else:
+        green = scale_u8(green.astype(int) + grey.astype(int), z_range=[0, 255])
+
+    if blue is None:
+        blue = grey
+    else:
+        blue = scale_u8(blue.astype(int) + grey.astype(int), z_range=[0, 255])
+
+    im = Image.merge('RGB', (Image.fromarray(red), Image.fromarray(green), Image.fromarray(blue)))
+
+    return im
+
+
+
+def test_merge_image(df):
+    transmission_image = plt.imread(Path(select_frames(df, slice=0, frame=0, tile=0, folder=[26]).iloc[0]['Filename']))
+    fluorescence_image = plt.imread(Path(select_frames(df, slice=2, frame=0, tile=0, folder=[26]).iloc[0]['Filename']))
+
+    transmission_image = scale_u8(transmission_image)
+    z_range = np.asarray([np.percentile(fluorescence_image, 25), 1.5 * np.percentile(fluorescence_image, 99)])
+    fluorescence_image = scale_u8(fluorescence_image, z_range)
+
+    im = merge_images(transmission_image, blue=fluorescence_image, red=fluorescence_image)
+    outfile = select_frames(df, slice=0, frame=0, tile=0, folder=[26]).iloc[0]['Filename'].replace('tiff', 'jpg')
+    print(outfile)
+    im.save(outfile, "JPEG")
+
 
 filename = r'C:\Data\noort\210316\data_023\data_023.dat'
 filename = r'C:\tmp\data_023\data_023.dat'
@@ -235,9 +276,15 @@ filenr = '001'
 filenames = [r'D:\Data\Noort\2photon\210406_grid_test\data_002\data_002.dat']
 filenames = [rf'C:\Data\noort\210422\data_{filenr}\data_{filenr}.dat']
 
+filenrs = [26, 27, 28, 29, 30]
+filenames = [rf'D:\Data\Noort\2photon\210426 time_lapse_pollen\210424\data_{filenr:03d}\data_{filenr:03d}.dat' for
+             filenr in filenrs]
 
-
+dir = Path(r'D:\Data\Noort\2photon\210426 time_lapse_pollen\210424')
+filenames = [str(f) for f in dir.glob('data_*\data_*.dat')]
 df = read_dat(filenames)
+
+test_merge_image(df)
 
 if 0:
     # read settings
@@ -248,10 +295,12 @@ if 0:
     # make gif
     foldername = Path(df['Filename'].iloc[0]).parent.parent
     for tile in set(df['Tile'].astype(int)):
+        # for tile in [0]:
         filename_out = (rf'{foldername}\tile{tile}.gif')
+        print(filename_out)
         print(frames_to_gif(filename_out, select_frames(df, tile=tile, slice=range(2, 20)), max_intensity=True))
 
-if 1:
+if 0:
     # stitch mosaic
     mosaic, extent = stitch_mosaic(select_frames(df, frame=0, slice=0))
     if mosaic is not None:
