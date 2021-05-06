@@ -1,0 +1,62 @@
+[Log]
+Text = "Please fill out a simple description of the experiment!"
+Name = "noort"
+Date = "vrijdag 23 april 2021"
+Time = "14:31:26"
+
+[Timing]
+Transition (s) = 0.010000
+DAQ rate (Hz) = 10000.000000
+Size (pix) = 512.000000
+Exposure (s) = 0.100000
+Shutter delay (s) = 0.005000
+Slice (s) = 0.150000
+Series (s) = 0.000000
+
+[Beam]
+Magnification = 25.000000
+Spirals = 6.000000
+A spiral (V) = 2.00000
+Sigma = 1.100000
+SLIM = 0.000000
+Pixel size (um) = 0.130000
+
+[Stack]
+LED (V) = 1.000000
+Steps = 4.000000
+Z step (um) = 1.000000
+UV (%) =1.00
+
+[Serie]
+Parameter = "Stepper x (um)"
+Start (units) = 0.000000
+Stop (units) = 3.000000
+Relative = "FALSE"
+N steps = 0.000000
+End position (um) = "-945.0; 285.0; 342.0; "
+
+[Mosaic]
+0 = "-535.0; 530.0; 381.0; "
+1 = "-580.0; 915.0; 378.0; "
+2 = "-805.0; 975.0; 353.0; "
+3 = "-680.0; -340.0; 353.0; "
+4 = "-960.0; -710.0; 387.5; "
+5 = "-955.0; -625.0; 387.0; "
+6 = "-795.0; 125.0; 357.0; "
+7 = "-945.0; 285.0; 342.0; "
+8 = "-800.0; 965.0; 347.0; "
+9 = "-925.0; 1380.0; 392.0; "
+
+[Excitation]
+Power (mW) = 0.818069
+Emission filter (nm) = 0
+Wavelength (nm) = 730.000000
+Polarization = 0.000000
+
+[Emission Filters]
+0 = "0 (nm)"
+1 = "527-70 (nm)"
+2 = "451-106 (nm)"
+3 = "0 (nm)"
+4 = "560-50 (nm)"
+5 = "650-100 (nm)"
