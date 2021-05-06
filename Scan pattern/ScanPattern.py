@@ -21,9 +21,8 @@ def read_log(filename, show = False):
                 if key in line:
                     settings[key] = float(line.split('=')[-1])
 
-    settings['zc (V)'] = 0
-
     if show:
+        print('file: ', filename)
         for key in settings:
             print(f'{key} = {settings[key]}')
 
@@ -220,10 +219,11 @@ def create_signals(filename, show=False):
     return block, channels
 
 if __name__ == '__main__':
-    filenr = '001'
+    filenr = '005'
     filename = rf'C:\Data\noort\210422\data_{filenr}\data_{filenr}.dat'
+    filename = rf'C:\Data\noort\210506\data_{filenr}\data_{filenr}.dat'
 
-    filename = 'data_011.log'
+    # filename = 'data_011.log'
 
     # settings = read_log(filename, True)
 
