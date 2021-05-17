@@ -11,6 +11,7 @@ import Extra_functions as Ef
 import cv2
 from lmfit import Model, Parameters, minimize
 import math
+import warnings
 
 ## FUNCTIONS FOR ANALYSE IMAGES
 def scale_image_u8(image_array, z_range=None):
@@ -76,7 +77,6 @@ def fit_peak(Z, show=False, center=[0, 0]):
     X, Y = np.meshgrid(np.linspace(1, N - 1, N) - N / 2 + center[0],
                        np.linspace(1, N - 1, N) - N / 2 + center[1])
     xdata = np.vstack((X.ravel(), Y.ravel()))
-
     params = Parameters()
     params.add('x0', value=center[0], min = -N/2, max = N/2)
     params.add('y0', value=center[1], min = -N/2, max = N/2)
@@ -86,20 +86,16 @@ def fit_peak(Z, show=False, center=[0, 0]):
     params.add('intensity', value = np.max(Z)/(8*np.pi), min = 0, max = 1e5)
     out = minimize(residual, params, args=(xdata,), kws={'data': Z.ravel()}, method='differential_evolution')
     out = minimize(residual, out.params , args=(xdata,), kws={'data': Z.ravel()})
-    p_fitted = [out.params[p].value for p in out.params]
-    err_p  = [out.params[p].stderr for p in out.params]
-    fit = gaussian_elipse(X, Y, *p_fitted)
     R2 = 1 - out.residual.var() / np.var(Z.ravel())
-    out.params.pretty_print()
-    print(f'R2 = {R2:0.4f}')
-    print()
-
-    if show and R2 < 0.5:
+    p_fitted = [out.params[p].value for p in out.params]
+    err_p = [out.params[p].stderr for p in out.params]
+    fit = gaussian_elipse(X, Y, *p_fitted)
+    p_fitted = np.append(p_fitted, R2)
+    p_fitted = np.append(p_fitted, err_p)
+    if show and R2>0.5:
         # Plot the 3D figure of the fitted function and the residuals.
-        #for p, e in enumerate(zip(p_fitted, err_p)):
-        #    print(f'par[{p}] = {e[0]} +/- {e[1]}')
-
-
+        out.params.pretty_print()
+       # print(f'R2 = {R2:0.4f}')
         fig = plt.figure(0)
         ax = fig.gca(projection='3d')
         surf = ax.plot_surface(X, Y, Z, cmap='afmhot', )
@@ -120,57 +116,7 @@ def fit_peak(Z, show=False, center=[0, 0]):
         plt.title("residu peak", fontsize=20)
         #plt.close()
         plt.show()
-    p_fitted = np.append(p_fitted, err_p)
-    return fit, p_fitted, err_p
-
-def fit_peak1(Z, show=False, center=[0, 0]):
-    # Our function to fit is a two-dimensional Gaussian
-    def gaussian(x, y, x0, y0, sigma, A):
-        return A * np.exp(-((x - x0) / (2*sigma)) ** 2 - ((y - y0) / (2*sigma)) ** 2)
-
-    # This is the callable that is passed to curve_fit. M is a (2,N) array
-    # where N is the total number of data points in Z, which will be ravelled
-    # to one dimension.
-    def _gaussian(M, *args):
-        x, y = M
-        arr = gaussian(x, y, *args)
-        return arr
-    Z = np.asarray(Z.T)
-    N = len(Z)
-    X, Y = np.meshgrid(np.linspace(0, N - 1, N) - N / 2 + center[0],
-                       np.linspace(0, N - 1, N) - N / 2 + center[1])
-    p = (center[0], center[1], 2, np.max(Z))
-    xdata = np.vstack((X.ravel(), Y.ravel()))
-    popt, pcov = curve_fit(_gaussian, xdata, Z.ravel(), p)
-    fit = gaussian(X, Y, *popt)
-    err = np.sqrt(np.diag(pcov))
-    if show:
-        # Plot the 3D figure of the fitted function and the residuals.
-        for p, e in enumerate(zip(p, err)):
-            print(f'par[{p}] = {e[0]} +/- {e[1]}')
-        fig = plt.figure(0)
-        ax = fig.gca(projection='3d')
-        surf=ax.plot_surface(X, Y, Z, cmap='afmhot', )
-        plt.colorbar(surf, shrink=0.5, aspect=7)
-        ax.set_zlim(-20, 90)
-        plt.title("raw peak", fontsize=16)
-        fig = plt.figure(1)
-        ax = fig.gca(projection='3d')
-        surf=ax.plot_surface(X, Y, fit, cmap='afmhot')
-        ax.set_zlim(-20, 90)
-        plt.title("fit peak", fontsize=16)
-        plt.colorbar(surf, shrink=0.5, aspect=7)
-        fig = plt.figure(2)
-        ax = fig.gca(projection='3d')
-        surf=ax.plot_surface(X, Y, Z - fit, cmap='afmhot')
-        ax.set_zlim(-20, 90)
-        plt.colorbar(surf, shrink=0.5, aspect=7)
-        plt.title("residu peak", fontsize=20)
-        plt.show()
-
-    popt = np.append(popt, err)
-    return fit, popt, err
-
+    return fit, p_fitted, R2
 
 
 def find_peaks(image_array, width=20, treshold_sd=5, n_traces=200):
@@ -180,17 +126,17 @@ def find_peaks(image_array, width=20, treshold_sd=5, n_traces=200):
     trace_i = 0
     pos = []
     while max > treshold and trace_i < n_traces:
-        print(f'trace = {trace_i}')
         max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
         max_index = check_roi(max_index, image_array, width)
         roi = get_roi(image_array, max_index, width)
-        fit, pars, _ = fit_peak(roi, show=True)
+        fit, pars,R2 = fit_peak(roi, show=True)
         image_array = set_roi(image_array, max_index, roi - fit)
         # pars[0], pars[1] =  pars[1], pars[0]
         pars[:2] += max_index
         max = np.max(image_array)
         trace_i += 1
         pos.append(pars)
+
     return np.asarray(pos), image_array
 
 
@@ -251,9 +197,14 @@ def msd_trajectory(df, tracenr, pixsize_um,show=False):
             current_tau = filenr2 - filenr1 - 1
             last = np.where(squared_displacements[current_tau] == 0)[1][0]
             squared_displacements[current_tau,last] = np.sum((peak2 - peak1) ** 2)
-    tau = np.arange(0, tau_max)
-    msd = [np.mean(sd[sd !=0]) for sd in squared_displacements ]
-    msd_error = [np.std(sd[sd !=0]) for sd in squared_displacements ]
+    tau = np.arange(1, tau_max+1)
+    tau_max_array = np.full( shape=len(tau),fill_value=tau_max,dtype=np.int64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        msd = [np.nanmean(sd[sd != 0]) for sd in squared_displacements]
+        msd_error = [np.std(sd[sd !=0]) for sd in squared_displacements ]
+    N = tau_max_array / tau
+    msd_error=np.divide(msd_error,np.sqrt(N))
     if show:
         plt.errorbar(tau*0.4, msd,fmt = 'o', yerr=msd_error)
         plt.xlim((0, 11))
@@ -261,7 +212,7 @@ def msd_trajectory(df, tracenr, pixsize_um,show=False):
         plt.title(f"msd of tracenr {tracenr}", fontsize=20)
         plt.xlabel(r'$\tau$ (s)', fontsize=16)
         plt.ylabel(r'msd um^2', fontsize=16)
-        plt.savefig(fr"trajectory_{tracenr}\MSD_{tracenr}.png")
+        #plt.savefig(fr"trajectory_{tracenr}\MSD_{tracenr}.png")
         #plt.show()
         plt.close()
     msd_df=pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
@@ -279,10 +230,10 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=False, show=False)
+        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=False, show=True)
     # pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'intensity (a.u.)', 'error x (pix)',
     # 'error y (pix)', 'error sigma (pix)', 'error intensity (a.u.)'))
-    pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio','theta', 'intensity (a.u.)', 'error x (pix)',
+    pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio','theta', 'intensity (a.u.)','R2', 'error x (pix)',
     'error y (pix)', 'error sigma (pix)', 'error aspect_ratio','error theta','error intensity (a.u.)'))
     return pp_dataframe, filtered_image, cleared_image
 
@@ -293,9 +244,9 @@ def analyse_images(files, first_im, last_im, filefolder):
         image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
         pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=False)
         empty_pp_df.append(pp_df)
+        print(num)
     all_pp_df = pd.concat(empty_pp_df, ignore_index=False)
-    print(all_pp_df)
-    #all_pp_df.to_csv('dataset_pp_v2.csv', index=False)
+    all_pp_df.to_csv('dataset_pp_v3.csv', index=False)
     return all_pp_df
 
 
@@ -324,17 +275,17 @@ def analyse_dataset(df, files):
 def analyse_trajectories(df, files):
     sorted_tracelength = df['tracenr'].value_counts().index.values
     for i in sorted_tracelength:
-        if len(df.loc[df['tracenr'] == i]) < 0:
+        if len(df.loc[df['tracenr'] == i]) < 2:
             sorted_tracelength = np.delete(np.asarray(sorted_tracelength), np.where(sorted_tracelength == i)[0])
     msd_df = []
     taus= np.arange(1,df['Filenr'].max())
-    for i in sorted_tracelength[:20]:
-        single_df= msd_trajectory(df, i, 0.26, show=True)
+    for i in sorted_tracelength:
+        single_df= msd_trajectory(df, i, 0.26, show=False)
         msd_df.append(single_df)
     msd_df=pd.concat(msd_df, ignore_index=False, axis=1)
     tau_df=pd.DataFrame(taus*0.4, columns=['tau'])
     msd_df=pd.concat([tau_df, msd_df], ignore_index=False, axis=1)
-    msd_df.to_csv('dataset_msd.csv', index=False)
+    #msd_df.to_csv('dataset_msd_all.csv', index=False)
     return
 
 treshold = 5
@@ -342,12 +293,20 @@ vmax =50
 foldername =fr"C:\Users\Santen\Documents\Images\data_030XX"
 os.chdir(foldername)
 files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+
+dataset_pp = foldername+ "\dataset_pp_v2.csv"
+df_pp=pd.read_csv(dataset_pp)
+
 dataset_traces = foldername+ "\dataset_final_loop.csv"
 df_traces = pd.read_csv(dataset_traces)
 
+dataset_msd = foldername+ "\dataset_msd_all.csv"
+df_msd=pd.read_csv(dataset_msd)
 
+dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
+df_diffusie=pd.read_csv(dataset_diffusie)
 ## analysis images,dataset and trajectories
-analyse_images(files, 0, 29, foldername)
+analyse_images(files, 0, 2, foldername)
 #analyse_dataset(foldername+"\dataset_pp.csv", files)
 #analyse_trajectories(df_traces, files)
 
@@ -356,6 +315,49 @@ analyse_images(files, 0, 29, foldername)
 # Ef.show_histogram_values(df_traces,'amplitude (a.u.)', bins=np.linspace(20,150, 200))
 # Ef.show_histogram_values(df_traces,"sigma (pix)" ,bins= "auto")
 # Ef.show_intensity_histogram_filename(files[0])
+#Ef.show_histogram_values(df_pp,'aspect_ratio' ,bins= "auto")
+#Ef.show_histogram_values(df_pp,'intensity (a.u.)' ,bins=200)
+#Ef.show_histogram_values2(df_diffusie, 'diffusie',0, bins='auto')
+#Ef.show_histogram_values2(df_diffusie, 'tracking',1, bins=np.linspace(0,2,40))
+
+##plot
+def plot_msd(df):
+    x=df['tau']
+    msd=df.columns[df.columns.str.startswith('msd')]
+    for col_name in df[msd].columns.values:
+        y=df[col_name].dropna(0)
+        plt.plot(x[:len(y)],y, label=fr'{col_name}')
+    plt.title(f"msd", fontsize=20)
+    plt.xlabel(r'$\tau$ (s)', fontsize=16)
+    plt.ylabel(r'msd um^2', fontsize=16)
+    plt.legend()
+    plt.show()
+    return
+#plot_msd(df_msd.iloc[:,:20])
+
+def fit_msd(df):
+    x=df['tau']
+    msd = df.columns[df.columns.str.startswith('msd')]
+    empty_df=[]
+    for col_name in df[msd].columns.values:
+        y = df[col_name].dropna(0)
+        z=np.polyfit(x[:len(y)],y,1)
+        print(z)
+        p=np.poly1d(z)
+        xp=np.linspace(0,15,100)
+        plt.plot(x[:len(y)],y,'.', xp,p(xp),'-', label=fr'{col_name}')
+        plt.legend()
+        plt.xlim((0, 11))
+        plt.ylim((0, 10))
+        plt.show()
+        plt.close()
+        df_diffusie_trace=pd.DataFrame(np.asarray(z), columns=[col_name], index=['diffusie','tracking'])
+        empty_df.append(df_diffusie_trace)
+    df_diffusie = pd.concat(empty_df, ignore_index=False, axis=1)
+    #df_diffusie.to_csv('dataset_diffusie_all.csv', index=False)
+    return
+#fit_msd(df_msd.iloc[:4,:20])
+
 
 ##follow trajectory
 def video_traces(traces):
