@@ -13,13 +13,13 @@ from lmfit import Model, Parameters, minimize
 import math
 import warnings
 
-## FUNCTIONS FOR ANALYSE IMAGES
+#1) FUNCTIONS FOR ANALYSE
+#1.1)Function images
 def scale_image_u8(image_array, z_range=None):
     if z_range is None:
         z_range = [-2 ** 15, 2 ** 15]
     image_array = np.uint8(np.clip((255 * (image_array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
     return image_array
-
 
 def create_circular_mask(width, size=None, center=None, steepness=3):
     if size is None:
@@ -32,12 +32,10 @@ def create_circular_mask(width, size=None, center=None, steepness=3):
     mask = 1 - 1 / (1 + np.exp(-(r - width / 2) * steepness))
     return mask
 
-
 def get_roi(image_array, center, width):
     start = (np.asarray(center) - width // 2).astype(int)
     roi = image_array[start[0]: start[0] + width, start[1]: start[1] + width]  # invert axis for numpy array of image
     return roi
-
 
 def set_roi(image_array, center, roi):
     width = len(roi[0])
@@ -45,11 +43,9 @@ def set_roi(image_array, center, roi):
     image_array[start[0]: start[0] + width, start[1]: start[1] + width] = roi  # invert axis for numpy array of image
     return image_array
 
-
 def check_roi(loc, image, width):
     new_loc = np.clip(loc, width // 2, len(image) - width // 2)
     return new_loc
-
 
 def fit_peak(Z, show=False, center=[0, 0]):
     # Our function to fit is a two-dimensional Gaussian elipse
@@ -71,7 +67,6 @@ def fit_peak(Z, show=False, center=[0, 0]):
         if data is None:
             return model
         return model - data
-
     Z = np.asarray(Z.T)
     N = len(Z)
     X, Y = np.meshgrid(np.linspace(1, N - 1, N) - N / 2 + center[0],
@@ -114,10 +109,8 @@ def fit_peak(Z, show=False, center=[0, 0]):
         ax.set_zlim(-20, 90)
         plt.colorbar(surf, shrink=0.5, aspect=7)
         plt.title("residu peak", fontsize=20)
-        #plt.close()
         plt.show()
     return fit, p_fitted, R2
-
 
 def find_peaks(image_array, width=20, treshold_sd=5, n_traces=200):
     max = np.max(image_array)
@@ -129,18 +122,21 @@ def find_peaks(image_array, width=20, treshold_sd=5, n_traces=200):
         max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
         max_index = check_roi(max_index, image_array, width)
         roi = get_roi(image_array, max_index, width)
-        fit, pars,R2 = fit_peak(roi, show=True)
-        image_array = set_roi(image_array, max_index, roi - fit)
-        # pars[0], pars[1] =  pars[1], pars[0]
+        fit, pars,R2 = fit_peak(roi, show=False)
+        #if statement toevoegen
+        if R2<=0.5:
+            image_array = set_roi(image_array, max_index, roi-roi)
+           # print('R2<0.5', R2)
+        else:
+            image_array = set_roi(image_array, max_index, roi - fit)
+           # print('R2>0.5', R2)
         pars[:2] += max_index
         max = np.max(image_array)
         trace_i += 1
         pos.append(pars)
-
     return np.asarray(pos), image_array
 
-
-## FUNCTIONS FOR ANALYSE DATASETS
+#1.2) Function dataset peak positions
 def link_peaks(df, image, n_image, max_dist=5, show=False):
     pp_df = df.copy()
     for j in range(int(n_image) - 1):
@@ -187,6 +183,7 @@ def link_traces(df, image, show=False, max_dist=5):
         Ef.plot_link_traces(image, pp_df)
     return pp_df
 
+#1.3) Functions dataset traces
 def msd_trajectory(df, tracenr, pixsize_um,show=False):
     positions = df[df['tracenr'] == tracenr].loc[:, ['x (pix)', 'y (pix)']].values * pixsize_um
     filenrs = df[df['tracenr'] == tracenr].loc[:, ['Filenr']].values
@@ -219,7 +216,8 @@ def msd_trajectory(df, tracenr, pixsize_um,show=False):
     msd_df[fr'error_{tracenr}']= msd_error
     return msd_df
 
-##Analyse, image, images, dataset and trajectories
+#2) FUNCTIONS FOR ANALYSE
+#2.1)Analyse image and images
 def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, show=False):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
@@ -230,33 +228,74 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=False, show=True)
+        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=True, show=False)
     # pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'intensity (a.u.)', 'error x (pix)',
     # 'error y (pix)', 'error sigma (pix)', 'error intensity (a.u.)'))
     pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio','theta', 'intensity (a.u.)','R2', 'error x (pix)',
     'error y (pix)', 'error sigma (pix)', 'error aspect_ratio','error theta','error intensity (a.u.)'))
     return pp_dataframe, filtered_image, cleared_image
 
-
 def analyse_images(files, first_im, last_im, filefolder):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
+        print(num)
         image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
         pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=False)
+        image1=image.flatten()
+        image2=filtered_image.flatten()
+        image3=cleared_image.flatten()
+        #Ef.show_intensity_histogram_filename(image1)
+        #Ef.show_intensity_histogram_filename(image2)
+       # Ef.show_intensity_histogram_filename(image2,image3)
         empty_pp_df.append(pp_df)
-        print(num)
     all_pp_df = pd.concat(empty_pp_df, ignore_index=False)
-    all_pp_df.to_csv('dataset_pp_v3.csv', index=False)
+    #all_pp_df.to_csv('dataset_pp_v3.csv', index=False)
     return all_pp_df
 
+#2.2) Selection peaks
+def peak_selection(df,filenr,selection_ar,selection_R2,selection_int,  width=20,show1=False, show2=False):
+    df = df.loc[df['Filenr'] == filenr]
+    df_selection = df.loc[df['aspect_ratio'] >= selection_ar].append(df.loc[df['R2'] <=selection_R2])
+    df_selection=df_selection.append(df.loc[df['intensity (a.u.)'] >= selection_int])
+    df_selection_pp= df.loc[df['aspect_ratio'] <= selection_ar].append(df.loc[df['R2'] >=selection_R2])
+    df_selection_pp = df_selection_pp.append(df.loc[df['intensity (a.u.)'] <= selection_int])
+    print('Amount of peaks that meet requirements: ', len(df) - len(df_selection))
+    print('Amount of peaks that not meet requirements: ', len(df_selection))
+    # df_selection_pp.to_csv('dataset_selection_pp.csv', index=False)
+    if show1:
+        image_original = np.asarray(tiff.imread(files[filenr]).astype(float))[200:800, 200:800]
+        image_original -= np.median(image_original)
+        plt.imshow(image_original, origin="lower", vmin=-20, vmax=50)
+        plt.gray()
+        plt.plot(df_selection_pp.loc[:, 'y (pix)'], df_selection_pp.loc[:, 'x (pix)'], "o",  markerfacecolor="none", color="blue")
+        plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none", color="red")
+        plt.title('Filtered image with traces', fontsize=20)
+        plt.colorbar()
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
+        plt.show()
+    if show2:
+        for i in df_selection.index.tolist():
+            image_filter = filter_image(files[filenr])
+            x_center = df.loc[i, 'x (pix)']
+            y_center = df.loc[i, 'y (pix)']
+            roi = get_roi(image_filter, [float(x_center), float(y_center)], width)
+            plt.imshow(roi, origin='lower', vmin=-20, vmax=50)
+            plt.plot(width / 2, width / 2, "o", markerfacecolor="none", color="red")
+            plt.title('Filtered image with traces', fontsize=20)
+            plt.colorbar()
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
+            plt.gray()
+            plt.show()
 
+#2.3)Analyse dataset peak positions
 def filter_image(file, highpass=4, lowpass=1):
     image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
     return filtered_image
-
 
 def analyse_dataset(df, files):
     df = pd.read_csv(df)
@@ -272,6 +311,7 @@ def analyse_dataset(df, files):
     trace_df.to_csv('dataset_final_loop.csv', index=False)
     return link_df_old, trace_df
 
+#2.4)Analyse dataset traces
 def analyse_trajectories(df, files):
     sorted_tracelength = df['tracenr'].value_counts().index.values
     for i in sorted_tracelength:
@@ -288,14 +328,20 @@ def analyse_trajectories(df, files):
     #msd_df.to_csv('dataset_msd_all.csv', index=False)
     return
 
+#3) VARIABLES
 treshold = 5
+vmin=-20
 vmax =50
 foldername =fr"C:\Users\Santen\Documents\Images\data_030XX"
 os.chdir(foldername)
 files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
-dataset_pp = foldername+ "\dataset_pp_v2.csv"
+#4) DATAFRAMES
+dataset_pp = foldername+ "\dataset_pp.csv"
 df_pp=pd.read_csv(dataset_pp)
+
+dataset_pp2 = foldername+ "\dataset_pp_v2.csv"
+df_pp2=pd.read_csv(dataset_pp2)
 
 dataset_traces = foldername+ "\dataset_final_loop.csv"
 df_traces = pd.read_csv(dataset_traces)
@@ -305,58 +351,68 @@ df_msd=pd.read_csv(dataset_msd)
 
 dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
 df_diffusie=pd.read_csv(dataset_diffusie)
-## analysis images,dataset and trajectories
-analyse_images(files, 0, 2, foldername)
+
+#5) CALLING ANALYSIS FUNCTIONS
+#analyse_images(files, 0, 29, foldername)
+#peak_selection(df_pp2,1,5,0,1000, show1=True, show2=False)
 #analyse_dataset(foldername+"\dataset_pp.csv", files)
 #analyse_trajectories(df_traces, files)
 
-###validations functions
-##histograms
-# Ef.show_histogram_values(df_traces,'amplitude (a.u.)', bins=np.linspace(20,150, 200))
+#6) FUNCTIONS FOR VALIDATIONS
+#6.1) Histogrmas
+#6.1.1) Dataset peak positions;circulair fitten
+#Ef.show_histogram_values(df_pp,'amplitude (a.u.)', bins=np.linspace(-20,80, 200))
 # Ef.show_histogram_values(df_traces,"sigma (pix)" ,bins= "auto")
-# Ef.show_intensity_histogram_filename(files[0])
-#Ef.show_histogram_values(df_pp,'aspect_ratio' ,bins= "auto")
-#Ef.show_histogram_values(df_pp,'intensity (a.u.)' ,bins=200)
+
+#6.1.2) Dataset peak positons;elipse fitten
+#Ef.show_histogram_values(df_pp2,'aspect_ratio' ,bins= np.linspace(1,6,100))
+#Ef.show_histogram_values(df_pp2,'R2' ,bins= np.linspace(-0,1,100))
+#Ef.show_histogram_values(df_pp2,'error x (pix)' ,bins= "auto")
+#Ef.show_histogram_values(df_pp2,'error y (pix)' ,bins= "auto")
+#Ef.show_histogram_values(df_pp2,'intensity (a.u.)' ,bins=np.linspace(0,1500,100))
+
+#6.1.2.)
 #Ef.show_histogram_values2(df_diffusie, 'diffusie',0, bins='auto')
 #Ef.show_histogram_values2(df_diffusie, 'tracking',1, bins=np.linspace(0,2,40))
 
-##plot
-def plot_msd(df):
-    x=df['tau']
-    msd=df.columns[df.columns.str.startswith('msd')]
-    for col_name in df[msd].columns.values:
-        y=df[col_name].dropna(0)
-        plt.plot(x[:len(y)],y, label=fr'{col_name}')
-    plt.title(f"msd", fontsize=20)
-    plt.xlabel(r'$\tau$ (s)', fontsize=16)
-    plt.ylabel(r'msd um^2', fontsize=16)
-    plt.legend()
-    plt.show()
-    return
-#plot_msd(df_msd.iloc[:,:20])
+#####plots
+##plot for in first dataframe
+#Ef.plot_pp(files[1], df_pp2,1)         #all pp
+#Ef.plot_peak(files[0], df_pp, 9)       # single peaks
 
-def fit_msd(df):
+
+
+def fit_msd(df, show1=False, show2=False):
     x=df['tau']
     msd = df.columns[df.columns.str.startswith('msd')]
     empty_df=[]
-    for col_name in df[msd].columns.values:
-        y = df[col_name].dropna(0)
-        z=np.polyfit(x[:len(y)],y,1)
-        print(z)
-        p=np.poly1d(z)
-        xp=np.linspace(0,15,100)
-        plt.plot(x[:len(y)],y,'.', xp,p(xp),'-', label=fr'{col_name}')
+    if show1:
+        for col_name in df[msd].columns.values:
+            y = df[col_name].dropna(0)
+            plt.plot(x[:len(y)], y, label=fr'{col_name}')
+        plt.title(f"msd", fontsize=20)
+        plt.xlabel(r'$\tau$ (s)', fontsize=16)
+        plt.ylabel(r'msd um^2', fontsize=16)
         plt.legend()
-        plt.xlim((0, 11))
-        plt.ylim((0, 10))
         plt.show()
-        plt.close()
-        df_diffusie_trace=pd.DataFrame(np.asarray(z), columns=[col_name], index=['diffusie','tracking'])
+    if show2:
+        for col_name in df[msd].columns.values:
+            y = df[col_name].dropna(0)
+            z = np.polyfit(x[:len(y)], y, 1)
+            print(z)
+            p = np.poly1d(z)
+            xp = np.linspace(0, 15, 100)
+            plt.plot(x[:len(y)], y, '.', xp, p(xp), '-', label=fr'{col_name}')
+            plt.legend()
+            plt.xlim((0, 11))
+            plt.ylim((0, 10))
+            plt.show()
+        df_diffusie_trace = pd.DataFrame(np.asarray(z), columns=[col_name], index=['diffusie', 'tracking'])
         empty_df.append(df_diffusie_trace)
-    df_diffusie = pd.concat(empty_df, ignore_index=False, axis=1)
-    #df_diffusie.to_csv('dataset_diffusie_all.csv', index=False)
+        df_diffusie = pd.concat(empty_df, ignore_index=False, axis=1)
+        # df_diffusie.to_csv('dataset_diffusie_all_v2.csv', index=False)
     return
-#fit_msd(df_msd.iloc[:4,:20])
+fit_msd(df_msd.iloc[:4,:20], show1=False, show2=True)
 
 
 ##follow trajectory
@@ -372,7 +428,7 @@ def video_traces(traces):
             height, width, layers = img.shape
             size = (width, height)
             img_array.append(img)
-        out = cv2.VideoWriter(fr'video_trajactory.avi', cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
+        out = cv2.VideoWriter(fr'video_trajactory_v2.avi', cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
         for i in range(len(img_array)):
             out.write(img_array[i])
         out.release()
