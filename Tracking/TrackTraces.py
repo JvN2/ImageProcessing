@@ -235,10 +235,10 @@ def analyse_images(files, first_im, last_im, filefolder):
     for num, file in enumerate(files[first_im:last_im]):
         print(num)
         image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=False)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=True)
         #Ef.show_intensity_histogram_filename(image.flatten())
         #Ef.show_intensity_histogram_filename(filtered_image.flatten())
-       # Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
+        #Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
         empty_pp_df.append(pp_df)
     all_pp_df = pd.concat(empty_pp_df, ignore_index=False)
     #all_pp_df.to_csv('dataset_pp_v3.csv', index=False)
@@ -265,7 +265,7 @@ def peak_selection(df,files,selection_ar,selection_R2,selection_int,  width=20,s
         if show1:
             image_original = np.asarray(tiff.imread(files[num]).astype(float))[200:800, 200:800]
             image_original -= np.median(image_original)
-            plt.imshow(image_original, origin="lower", vmin=-20, vmax=80, cmp='gray')
+            plt.imshow(image_original, origin="lower", vmin=-20, vmax=80, cmap='gray')
             plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                      color="red", ms=15)
             plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none",
@@ -318,7 +318,7 @@ def analyse_trajectories(df, files):
     return
 
 #2.5) Analyse dataset mean squared displacement
-def fit_msd(df, show1=False, show2=False):
+def analyse_msd(df, show1=False, show2=False):
     x=df['tau']
     msd = df.columns[df.columns.str.startswith('msd')]
     print(msd)
@@ -375,11 +375,11 @@ dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
 df_diffusie=pd.read_csv(dataset_diffusie)
 
 #5) CALLING ANALYSIS FUNCTIONS
-#analyse_images(files, 0, 29, foldername)
+analyse_images(files, 0, 29, foldername)
 #peak_selection(df_pp2,files,10,0,500, show1=True)
 #analyse_dataset(dataset_pp, files)
 #analyse_trajectories(df_traces, files)
-#fit_msd(df_msd.iloc[:27,:], show1=False, show2=True)
+#analyse_msd(df_msd.iloc[:27,:], show1=False, show2=True)
 
 #6) FUNCTIONS FOR VALIDATIONS
 #6.1) Histograms
@@ -403,6 +403,7 @@ df_diffusie=pd.read_csv(dataset_diffusie)
 #6.2) Plots
 #6.2.1)Plot peak positions of all
 #Ef.plot_pp(files[1], df_pp2,1)         #all pp
+
 #6.3) Follow trajectories
 def video_select(filename):
     os.chdir(foldername +filename)
