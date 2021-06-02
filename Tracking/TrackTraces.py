@@ -260,37 +260,18 @@ def peak_selection(df,files,selection_ar,selection_R2,selection_int,  width=20,s
         df_selection=df_selection.loc[df_selection['intensity (a.u.)'] < selection_int]
         len_file= len(df_file)+len_file
         len_selection=len(df_selection)+ len_selection
-        print('All peaks per image', len(df_file))
-        print('Amount of peaks that meet requirements: ', len(df_selection))
-        print('Amount of peaks that not meet requirements: ', len(df_file)-len(df_selection))
-        if num !=0:
-            aver_len = len_file/(num+1)
-            aver_sel = len_selection/(num+1)
-        else:
-            aver_len=len_file
-            aver_sel=len_selection
-
+        print('All peaks per image', len(df_file),'Amount of peaks that meet requirements: ', len(df_selection),'Amount of peaks that not meet requirements: ', len(df_file)-len(df_selection))
         empty_pp_df.append(df_selection)
         if show1:
             image_original = np.asarray(tiff.imread(files[num]).astype(float))[200:800, 200:800]
             image_original -= np.median(image_original)
-            plt.imshow(image_original, origin="lower", vmin=-20, vmax=80)
-            plt.gray()
+            plt.imshow(image_original, origin="lower", vmin=-20, vmax=80, cmp='gray')
             plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                      color="red", ms=15)
             plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                      color="blue", ms=15)
-            plt.title('Filtered image with traces', fontsize=20)
-            plt.colorbar()
-            plt.xlim([100, 400])
-            plt.ylim([100, 400])
-            plt.xticks(fontsize=16)
-            plt.yticks(fontsize=16)
-            #plt.savefig( fr"selection_peaks\Image {num}.jpg")
+            tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, xrange=[0,599], yrange=[0,599], save=fr"selection_peaks\Image {num}.jpg", scale_page=0.5)
             plt.show()
-    print('Average all found peaks per image', aver_len)
-    print('Average amount of peaks that meet requirements: ', aver_sel)
-    print('Average amount of peaks that not meet requirements: ', aver_len - aver_sel)
     dataset_pp_selection = pd.concat(empty_pp_df, ignore_index=False)
     #dataset_pp_selection.to_csv('dataset_pp_selection.csv', index=False)
     return
@@ -344,28 +325,21 @@ def fit_msd(df, show1=False, show2=False):
     empty_df=[]
     plt.ioff()
     if show1:
-        fig=plt.figure()
-        ax=fig.gca()
         for col_name in df[msd].columns.values:
             y = df[col_name].dropna(0)
-            ax.plot(x[:len(y)], y)
-        ax.set_title(f"msd")
-        ax.set_xlabel(r'$\tau$ (s)')
-        ax.set_ylabel(r'msd um^2')
-        fig.savefig('all_MSD.png')
+            plt.plot(x[:len(y)], y)
+            tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', title=f"msd ", aspect=1, xrange=[0, 25],
+                            yrange=[0, 25],save=fr"all_MSD.png", scale_page=0.5)
     for col_name in df[msd].columns.values:
         if show2:
             print(col_name)
-            fig=plt.figure()
-            ax=fig.gca()
             y = df[col_name].dropna(0)
             z = np.polyfit(x[:len(y)], y, 1)
             p = np.poly1d(z)
             xp = np.linspace(0, 15, 100)
-            ax.plot(x[:len(y)], y, '.', xp, p(xp), '-', label=fr'{col_name}')
-            ax.set_xlim(0, 30)
-            ax.set_ylim(0, 30)
-            ax.legend()
+            plt.plot(x[:len(y)], y, '.', xp, p(xp), '-', label=fr'{col_name}')
+            tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)',title=f"msd fit", aspect=1, xrange=[0, 25], yrange=[0, 25],
+                            save=fr"msd fit.png", scale_page=0.5)
         df_diffusie_trace = pd.DataFrame(np.asarray(z), columns=[col_name], index=['diffusie', 'tracking'])
         empty_df.append(df_diffusie_trace)
     df_diffusie = pd.concat(empty_df, ignore_index=False, axis=1)
@@ -423,8 +397,8 @@ df_diffusie=pd.read_csv(dataset_diffusie)
 #6.1.3.) Dataset diffusie; circulair fitten
 #Ef.show_histogram_values2(df_diffusie, 'diffusie',0)
 #Ef.show_histogram_values2(df_diffusie, 'tracking',1, bins=np.linspace(0,2,40))
-Ef.histogram_length_traces(df_link, 'red')
-Ef.histogram_length_traces(df_traces, 'blue')
+#Ef.histogram_length_traces(df_link, 'red')
+#Ef.histogram_length_traces(df_traces, 'blue')
 
 #6.2) Plots
 #6.2.1)Plot peak positions of all
