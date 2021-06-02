@@ -71,6 +71,8 @@ def fit_peak(Z, show=False, center=[0, 0]):
             return model
         return model - data
     Z = np.asarray(Z.T)
+    print(len(Z))
+    print(Z)
     N = len(Z)
     X, Y = np.meshgrid(np.linspace(1, N - 1, N) - N / 2 + center[0],
                        np.linspace(1, N - 1, N) - N / 2 + center[1])
@@ -156,7 +158,7 @@ def link_peaks(df, image, n_image, max_dist=5, show=False):
             pp_df.loc[int(no_trace[no_peak_num]), 'tracenr'] = new_trace_nr + no_peak_num
     if show:
         Ef.plot_link_traces(image, pp_df)
-    #pp_df.to_csv('dataset_linkpeaks.csv', index=False)
+    pp_df.to_csv('dataset_linkpeaks.csv_v2', index=False)
     return pp_df
 
 
@@ -225,7 +227,7 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=True, show=False)
+        Ef.plot_find_peaks(peak_positions, image, filtered_image, cleared_image, plotting=False, show=False)
     pp_dataframe = pd.DataFrame(peak_positions, columns=('Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio','theta', 'intensity (a.u.)','R2', 'error x (pix)',
     'error y (pix)', 'error sigma (pix)', 'error aspect_ratio','error theta','error intensity (a.u.)'))
     return pp_dataframe, filtered_image, cleared_image
@@ -235,7 +237,7 @@ def analyse_images(files, first_im, last_im, filefolder):
     for num, file in enumerate(files[first_im:last_im]):
         print(num)
         image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=True)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=False)
         #Ef.show_intensity_histogram_filename(image.flatten())
         #Ef.show_intensity_histogram_filename(filtered_image.flatten())
         #Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
@@ -284,18 +286,17 @@ def filter_image(file, highpass=4, lowpass=1):
     return filtered_image
 
 def analyse_dataset(df, files):
-    df = pd.read_csv(df)
     image = filter_image(files[0])
     sorted_tracelength = df['Filenr'].value_counts().index.values
-    link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
+    link_df_old = link_peaks(df, image, len(sorted_tracelength), show=True)
     link_df = link_df_old.copy()
     for i in range(10):
-        link_df = link_traces(link_df, image, show=False)
+        link_df = link_traces(link_df, image, show=True)
         if i == 0:
             print(i)
-            #link_df.to_csv(fr'dataset_linktraces_loop{i}.csv', index=False)
+            link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
     trace_df = link_df
-    #trace_df.to_csv('dataset_final_loop.csv', index=False)
+    trace_df.to_csv('dataset_final_loop.csv_v2', index=False)
     return link_df_old, trace_df
 
 
@@ -359,7 +360,7 @@ dataset_pp = foldername+ "\dataset_pp.csv"
 df_pp=pd.read_csv(dataset_pp)
 
 dataset_selection = foldername+ "\dataset_pp_selection.csv"
-df_diffusie=pd.read_csv(dataset_selection)
+df_selection=pd.read_csv(dataset_selection)
 
 dataset_link=foldername+ "\dataset_linkpeaks.csv"
 df_link=pd.read_csv(dataset_link)
@@ -375,9 +376,9 @@ dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
 df_diffusie=pd.read_csv(dataset_diffusie)
 
 #5) CALLING ANALYSIS FUNCTIONS
-analyse_images(files, 0, 29, foldername)
+#analyse_images(files, 0, 29, foldername)
 #peak_selection(df_pp2,files,10,0,500, show1=True)
-#analyse_dataset(dataset_pp, files)
+analyse_dataset(df_selection, files)
 #analyse_trajectories(df_traces, files)
 #analyse_msd(df_msd.iloc[:27,:], show1=False, show2=True)
 
@@ -439,4 +440,6 @@ def video_traces(traces,df):
             out.write(img_array[i])
         out.release()
 #video_traces(df_traces['tracenr'].value_counts().index.values,df_traces)
-
+x=np.array([0,1,2,3,4,5,6,7,8,9])
+y=np.array([12,14,16,17,19,20,22,24,25,28])
+#Ef.fit_msd(x,y)
