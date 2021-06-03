@@ -305,7 +305,7 @@ def analyse_trajectories(df):
         if len(df.loc[df['tracenr'] == i]) < 2:
             sorted_tracelength = np.delete(np.asarray(sorted_tracelength), np.where(sorted_tracelength == i)[0])
     msd_df = []
-    taus= np.arange(0,df['Filenr'].max())
+    taus= np.arange(1,df['Filenr'].max()+1)
     for i in sorted_tracelength:
         single_df= msd_trajectory(df, i, 0.56, show=True)
         msd_df.append(single_df)
@@ -316,24 +316,25 @@ def analyse_trajectories(df):
     return
 
 #2.5) Analyse dataset mean squared displacement
-def analyse_msd(df, show=False):
+def analyse_msd(df):
     filter_col = [col for col in df if col.startswith('msd')]
     tau=df.iloc[:,0] + 0.4
-    empty_df=[]
-
-    for col_name in filter_col[10:20]:
+    pos=[]
+    for col_name in filter_col[10:100]:
         msd = df[col_name]
         msd_error = df[col_name.replace('msd', 'error')]
         selection = (msd > 0) & (msd_error > 0)
-        fit = Ef.fit_msd(tau[selection], msd[selection], msd_error[selection])
-        plt.errorbar(tau[selection], msd[selection],fmt = 'o', yerr=msd_error[selection])
-        plt.plot(tau[selection], fit, color = plt.gca().lines[-1].get_color())
-
+        if len(msd_error[selection])>3:
+            fit, pars = Ef.fit_msd(tau[selection], msd[selection], msd_error[selection])
+            plt.errorbar(tau[selection], msd[selection], fmt='o', yerr=msd_error[selection])
+            plt.plot(tau[selection], fit, color=plt.gca().lines[-1].get_color())
+        else:
+            pars=[0,0,0,0,0,0]
+        pos.append(pars)
     tio.format_plot('tau (s)', 'msd (um^2)')
-        #df_diffusie_trace = pd.DataFrame(np.asarray(z), columns=[col_name], index=['diffusie', 'tracking'])
-        #empty_df.append(df_diffusie_trace)
-    #df_diffusie = pd.concat(empty_df, ignore_index=False, axis=1)
-    #df_diffusie.to_csv('dataset_diffusie_all.csv', index=False)
+    plt.close()
+    df_diffusie = pd.DataFrame(np.asarray(pos), columns=('sigma (um)', r'diffusion (um m^2 s^-2$)', 'velocity (um s^-1)','sigma_error (um)', r'diffusion_error (um m^2 s^-2$)', 'velocity_error (um s^-1)'))
+    df_diffusie.to_csv('dataset_diffusie_all.csv', index=False)
     return
 
 #3) VARIABLES
@@ -345,11 +346,11 @@ os.chdir(foldername)
 files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
 #4) DATAFRAMES
-#dataset_pp = foldername+ "\dataset_pp.csv"
-#df_pp=pd.read_csv(dataset_pp)
+dataset_pp = foldername+ "\dataset_pp.csv"
+df_pp=pd.read_csv(dataset_pp)
 
-#dataset_selection = foldername+ "\dataset_pp_selection.csv"
-#df_selection=pd.read_csv(dataset_selection)
+dataset_selection = foldername+ "\dataset_pp_selection.csv"
+df_selection=pd.read_csv(dataset_selection)
 
 dataset_link=foldername+ "\dataset_linkpeaks_v2.csv"
 df_link=pd.read_csv(dataset_link)
@@ -361,15 +362,15 @@ df_traces = pd.read_csv(dataset_traces)
 dataset_msd = foldername+ "\dataset_msd_v2.csv"
 df_msd=pd.read_csv(dataset_msd)
 
-#dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
-#df_diffusie=pd.read_csv(dataset_diffusie)
+dataset_diffusie = foldername+ "\dataset_diffusie_all.csv"
+df_diffusie=pd.read_csv(dataset_diffusie)
 
 #5) CALLING ANALYSIS FUNCTIONS
 #analyse_images(files, 0, 29, foldername)
 #peak_selection(df_pp2,files,10,0,500, show1=True)
 #analyse_dataset(df_selection, files)
 #analyse_trajectories(df_traces)
-analyse_msd(df_msd.iloc[:,:], show=True)
+#analyse_msd(df_msd)
 
 #6) FUNCTIONS FOR VALIDATIONS
 #6.1) Histograms
@@ -377,22 +378,34 @@ analyse_msd(df_msd.iloc[:,:], show=True)
 #Ef.show_histogram_values(df_pp,'amplitude (a.u.)', bins=np.linspace(-20,80, 200))
 #Ef.show_histogram_values(df_traces,"sigma (pix)" ,bins= "auto")
 
-#6.1.2) Dataset peak positons;elipse fitten
-#Ef.show_histogram_values(df_pp2,'aspect_ratio' )
+#6.1.2) Dataset peak positons;
+#Ef.show_histogram_values(df_pp,'aspect_ratio' )
 #Ef.show_histogram_values(df_pp2,'R2')
 #Ef.show_histogram_values(df_pp2,'error x (pix)' ,bins= "auto")
 #Ef.show_histogram_values(df_pp2,'error y (pix)' ,bins= "auto")
 #Ef.show_histogram_values(df_pp2,'intensity (a.u.)')
 
-#6.1.3.) Dataset diffusie; circulair fitten
+#6.1.3.) Dataset diffusie;
 #Ef.show_histogram_values2(df_diffusie, 'diffusie',0)
 #Ef.show_histogram_values2(df_diffusie, 'tracking',1, bins=np.linspace(0,2,40))
 #Ef.histogram_length_traces(df_link, 'red')
 #Ef.histogram_length_traces(df_traces, 'blue')
+df_diffusie=df_diffusie[df_diffusie['sigma (um)']>0.1]
+df_diffusie=df_diffusie[df_diffusie[r'diffusion (um m^2 s^-2$)']>0]
+#Ef.show_histogram_values(df_diffusie,'sigma (um)')
+#Ef.show_histogram_values(df_diffusie, r'diffusion (um m^2 s^-2$)')
+#Ef.show_histogram_values(df_diffusie, r'velocity_error (um s^-1')
 
 #6.2) Plots
 #6.2.1)Plot peak positions of all
 #Ef.plot_pp(files[1], df_pp2,1)         #all pp
+
+#6.3) Scatter plots
+#6.3.1) Aspect ratio and intensity
+#Ef.show_scatterplot(df_selection,'R2', 'intensity (a.u.)')
+#Ef.show_scatterplot(df_diffusie,r'diffusion (um m^2 s^-2$)','sigma (um)')
+#Ef.show_scatterplot(df_diffusie,r'diffusion (um m^2 s^-2$)','velocity_error (um s^-1')
+Ef.show_scatterplot(df_diffusie,r'sigma (um)', 'velocity (um s^-1')
 
 #6.3) Follow trajectories
 def video_select(filename):
@@ -429,9 +442,7 @@ def video_traces(traces,df):
             out.write(img_array[i])
         out.release()
 #video_traces(df_traces['tracenr'].value_counts().index.values,df_traces)
-x=np.array([0,1,2,3,4,5,6,7,8,9])
-y=np.array([12,24,19,27,35,50,80,90,40,122])
-#Ef.fit_msd(x,y, 'ex')
+
 sorted_tracelength = df_traces['tracenr'].value_counts().index.values
 #Ef.piechart_selection(61,19,12 )
 print(sorted_tracelength[:20])
