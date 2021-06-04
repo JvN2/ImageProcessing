@@ -1,13 +1,13 @@
 from datetime import timedelta, datetime
 from pathlib import Path
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.fftpack as sfft
-import tqdm, cv2
+import tqdm
 from PIL import Image, ImageDraw, ImageFont
-import moviepy.editor as mp
 
 font = ImageFont.truetype('arial', 25)
 
@@ -46,9 +46,14 @@ def read_dat(filenames):
 
 
 def read_log(filename):
-    if '.log' not in filename:
-        filename = filename.split('.')[0] + '.log'
+    filename = Path(filename)
+    if filename.suffix == '.tiff':
+        filename = Path(f'{filename.parent}\\{filename.parent.stem}').with_suffix('.log')
+    else:
+        filename = filename.with_suffix('.log')
+
     keys = ['LED (V)', 'Pixel size (um)', 'Z step (um)', 'Magnification', 'Exposure (s)', 'Wavelength (nm)', 'T0 (ms)']
+
     settings = {}
     with open(filename) as reader:
         for line in reader:
@@ -59,7 +64,7 @@ def read_log(filename):
 
 
 def read_image(filename):
-    return plt.imread(Path(filename)).astype(float).T
+    return np.asarray(plt.imread(Path(filename)).astype(float).T)
 
 
 def select_frames(df, slice=None, serie=None, tile=None, frame=None, folder=None):
@@ -141,33 +146,50 @@ def scale_u8(array, z_range=None):
     return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
 
 
-def stacks_to_gif(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5):
+def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5):
     ims = []
+    df = select_frames(df, tile=tile)
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
-        df_stack = select_frames(df, slice=0, tile=tile, frame=frame)
-        if not df_stack.empty:
-            max_intensity = get_max_intensity_image(df, frame=frame, tile=tile)
-            transmission = read_image(df_stack.iloc[0]['Filename'])
+        df_stack = select_frames(df, tile=tile, frame=frame)
+        max_intensity = get_max_intensity_image(df_stack)
+        transmission = read_image(df_stack.iloc[0]['Filename'])
 
-            if max_intensity_range is None:
-                max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
-            if transmission_range is None:
-                transmission_range = [0.3*np.percentile(transmission, 2), 3*np.percentile(transmission, 60)]
+        if max_intensity_range is None:
+            max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
+            # print(f'max_intensity_range = {max_intensity_range}')
+        if transmission_range is None:
+            transmission_range = [0.3 * np.percentile(transmission, 2), 1.5*np.percentile(transmission, 95)]
+            # print(f'transmission_range = {transmission_range}')
 
-            transmission = scale_u8(transmission, transmission_range)
-            max_intensity = scale_u8(max_intensity, max_intensity_range)
+        transmission = scale_u8(transmission, transmission_range)
+        max_intensity = scale_u8(max_intensity, max_intensity_range)
 
-            im = merge_rgb_images(transmission, red=max_intensity)
+        im = merge_rgb_images(transmission, red=max_intensity)
 
-            # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
-            text = df_stack.iloc[0]['Filename']
-            add_text(im, f"{text[len(str(Path(text).parent.parent.parent)):]}")
-            add_scale_bar(im, 0.13)
-            add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
+        # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
+        # text = df_stack.iloc[0]['Filename']
+        # add_text(im, f"{text[len(str(Path(text).parent.parent.parent)):]}")
+        add_scale_bar(im, 0.13)
+        add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
+        ims.append(im)
 
-            ims.append(im)
+        ext = filename[-3:]
+        if ext == 'gif':
+            ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
+        elif ext in ['avi', 'mp4']:
+            height, width, layers = np.asarray(ims[0]).shape
+            size = (width, height)
+            if ext == 'avi':
+                codec = 'DIVX'
+            elif ext == 'mp4':
+                codec = 'mp4v'
+            out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
+            for im in ims:
+                out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
+            out.release()
+        else:
+            print('Filetype {ext} not supported.')
 
-    ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
     return filename
 
 
@@ -264,14 +286,24 @@ def merge_rgb_images(grey, red=None, green=None, blue=None):
     return im
 
 
-def get_max_intensity_image(df, frame, tile=0, serie=0):
-    df = select_frames(df, serie=serie, tile=tile, frame=frame)
-    if df['Photodiode (mW)'].min() < 0.5 * df['Photodiode (mW)'].mean():
-        df = df[df['Photodiode (mW)'].ne(df['Photodiode (mW)'].min())]
-    stack = []
+def get_max_intensity_image(df):
+    settings = read_log(df.iloc[0]['Filename'])
+    if settings["LED (V)"] > 0:
+        df = df[df['Slice'].ne(0)]
+
     for _, row in df.iterrows():
-        stack.append(read_image(row['Filename']))
-    return np.max(np.asarray(stack), axis=0)
+        im = np.array([read_image(row['Filename'])])
+        try:
+            stack = np.concatenate([stack, im], axis = 0)
+        except UnboundLocalError:
+            stack = im
+        except ValueError:
+            pass #dimensions probably don't match
+
+    if len(stack) == 1:
+        return stack[0]
+    else:
+        return np.max(stack, axis=0)
 
 
 def get_spectrum(df, show=False):
@@ -335,70 +367,23 @@ def get_drift(df, tile, vmax=None):
         plt.ylim((0, 2))
         plt.show()
 
-        # max_intensity = get_max_intensity_image(df, frame=frame, tile=tile)
-        # transmission = read_image(df_stack.iloc[0]['Filename'])
-        #
-        # if max_intensity_range is None:
-        #     max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
-        # if transmission_range is None:
-        #     transmission_range = [np.percentile(transmission, 2), 2 * np.percentile(transmission, 99)]
-        #
-        # transmission = scale_u8(transmission, transmission_range)
-        # max_intensity = scale_u8(max_intensity, max_intensity_range)
-        #
-        # im = merge_rgb_images(transmission, red=max_intensity)
-        #
-        # # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
-        # add_scale_bar(im, 0.13)
-        # add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
-        #
-        # ims.append(im)
-
-def convert_gif_avi(filename, extension = 'avi'):
-    clip = mp.VideoFileClip(filename)
-    filename = filename.replace('gif', extension)
-    if extension == 'avi':
-        clip.write_videofile(filename, codec='libx264')
-    elif extension == 'mp4':
-        clip.write_videofile(filename)
-    clip.close()
-    print(f'converted: {filename}')
-
 if __name__ == "__main__":
-    dir = Path(r'D:\Data\Noort\2photon\210521 pollen')
-    filenames = [str(f) for f in dir.glob('*\data_01[2,3,4,5,6,7,8,9]\data_*.dat')]
-    # filenames = ['D:\\Data\\Noort\\2photon\\210521 pollen\\210521\\data_012\\data_012.dat', 'D:\\Data\\Noort\\2photon\\210521 pollen\\210521\\data_013\\data_013.dat']
+    if 0:
+        # assembe dataframe from multiple folders/files
+        dir = Path(r'D:\Data\Noort\2photon\210521 pollen')
+        filenames = [str(f) for f in dir.glob('*\data_0[1,2]*\data_*.dat')]
+        print(f'{len(filenames)} files found.')
+        df = read_dat(filenames)
+        foldername = Path(df['Filename'].iloc[0]).parent.parent
+        df.to_csv(rf'{foldername.parent}\dataframe.csv')
 
-    nrs = [10]
-    # filenames = [rf'D:\Data\Noort\2photon\210423_first dataset pollen\data_{nr:03d}\data_{nr:03d}.dat' for nr in nrs]
-    # filenames = [rf'{dir}\data_{nr:03d}\data_{nr:03d}.dat' for nr in nrs]
-
-    filenames.sort()
-
-    # for f in filenames:
-    #     print(f)
-
-    df = read_dat(filenames)
-    # for i, row in df.iterrows():
-    #     print(i, row['Filename'])
-
-    df['Time (s)'] -= df['Time (s)'].min()
-
-    # max_intensity = get_max_intensity_image(df, frame=2, tile=28)
-    # plt.imshow(max_intensity, origin='lower')
-    # plt.show()
-
-
-    # i = get_max_intensity_image(df,frame = 0, tile = 10 )
-    # plt.imshow(i)
-    # plt.show()
-
-    # filename = Path(df.iloc[0]['Filename'])
-    # print(filename)
-    # tmp = [f for f in filename.iterdir() if f.is_dir()]
-    # print(tmp)
+    if 1:
+        # get dataframe from disk
+        df = pd.read_csv(r'D:\Data\Noort\2photon\210521 pollen\dataframe.csv')
+        print(f'Duration of experiment = {timedelta(seconds=df["Time (s)"].max() // 1)}.')
 
     if 0:
+        # get spectrum from images
         for nr, color in zip(nrs, ['green', 'red']):
             w, s = get_spectrum(select_frames(select_frames(df, slice=1), folder=nr))
             plt.plot(w, s, color=color)
@@ -414,21 +399,11 @@ if __name__ == "__main__":
         for key in settings:
             print(f'{key} = {settings[key]}')
     if 1:
-        # make gif
-
-        # df = select_frames(df, folder=[10,11,12,13])
-        # for _, row in df.iterrows():
-        #     print(row['Filename'])
-        df['Time (s)'] -= df['Time (s)'].min()
-
+        # create movie
         foldername = Path(df['Filename'].iloc[0]).parent.parent
-
-        # for tile in set(df['Tile'].astype(int)):
-        for tile in [1]:
-            filename_out = (rf'{foldername}\Fluorescence_{tile}.gif')
-            stacks_to_gif(filename_out, df, tile)
-
-            convert_gif_avi(filename_out)
+        for tile in set(df['Tile'].astype(int)):
+        # for tile in [6]:
+            stacks_to_movie(rf'{foldername.parent}\Tile_{tile}.mp4', df, tile)
 
     if 0:
         # stitch mosaic
@@ -440,6 +415,6 @@ if __name__ == "__main__":
             plt.show()
 
     if 0:
-        df['Time (s)'] -= df['Time (s)'].min()
+        # compute drift
         for tile in [1]:
             get_drift(df, tile)
