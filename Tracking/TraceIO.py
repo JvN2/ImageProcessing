@@ -300,7 +300,9 @@ def round_significance2(x, stderr=None, par_name=None, delimiter=' ± '):
              Otherwise the rounded values of x and stderr.
     """
     value = unc.ufloat(x, stderr)
-    if f'{value.std_dev}' == 'nan':
+    #if f'{value.std_dev}' == 'nan':
+    if stderr is np.NAN or stderr == 0 or stderr is None or stderr == '':
+        stderr = np.NAN
         str_value = f'{value:g}'
     else:
         str_value = f'{value:P}'
