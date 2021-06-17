@@ -186,7 +186,7 @@ def link_traces(df, image, show=False, max_dist=5):
     end_df = pd.concat(end_df, ignore_index=True)
     for trace, trace_values in end_df.iterrows():
         nstart_df = start_df.drop(np.asarray(start_df.index[start_df['Filenr'] <= trace_values.loc['Filenr']]))
-        nstart_df = nstart_df.drop(np.asarray(nstart_df.index[nstart_df['Filenr'] > trace_values.loc['Filenr'] + 6]))
+        nstart_df = nstart_df.drop(np.asarray(nstart_df.index[nstart_df['Filenr'] > trace_values.loc['Filenr'] + 3]))
         if len(nstart_df):
             distance_2 = np.sum(
                 (nstart_df.loc[:, ['x (pix)', 'y (pix)']] - trace_values.loc[['x (pix)', 'y (pix)']]) ** 2, axis=1)
@@ -219,8 +219,7 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
     plt.ioff()
     plt.errorbar(tau * 0.4, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
-    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 25], yrange=[0, 25], scale_page=0.5,
-                    save=fr"trajectory_{tracenr}\MSD_{tracenr}.png")
+    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 25], yrange=[0, 25], scale_page=0.5 ) #,save=fr"trajectory_{tracenr}\MSD_{tracenr}.png"
     plt.cla()
     msd_df = pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
     msd_df[fr'error_{tracenr}'] = msd_error
@@ -251,7 +250,7 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
 def analyse_images(files, first_im, last_im, filefolder, show=False):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
-        image = np.asarray(tiff.imread(file).astype(float)[100:500, 100:500])
+        image = np.asarray(tiff.imread(file).astype(float)[200:800,200:800])
         original_image = image
         original_image -= np.median(original_image)
         plt.imshow(original_image, vmin=-20, vmax=75, origin="lower", cmap='gray')
@@ -311,7 +310,7 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int, width=2
         len_file = len(df_file) + len_file
         len_selection = len(df_selection) + len_selection
         empty_pp_df.append(df_selection)
-        image_original = np.asarray(tiff.imread(files[num]).astype(float))[100:500, 100:500]
+        image_original = np.asarray(tiff.imread(files[num]).astype(float))[200:800,200:800]
         image_original -= np.median(image_original)
         plt.imshow(image_original, origin="lower", vmin=-20, vmax=80, cmap='gray')
         plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
@@ -320,6 +319,7 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int, width=2
                  color="blue", ms=15)
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, xrange=[0, 599], yrange=[0, 599],
                         save=fr"selection_peaks\Image {num}.jpg", scale_page=0.5)
+        plt.cla()
 
     dataset_pp_selection = pd.concat(empty_pp_df, ignore_index=False)
     dataset_pp_selection.to_csv('dataset_pp_selection.csv', index=False)
@@ -328,7 +328,7 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int, width=2
 
 # 2.3)Analyse dataset peak positions
 def filter_image(file, highpass=4, lowpass=1):
-    image = np.asarray(tiff.imread(file).astype(float))[100:500, 100:500]
+    image = np.asarray(tiff.imread(file).astype(float))[200:800,200:800]
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
@@ -377,7 +377,7 @@ def analyse_msd(df):
         N = df[col_name.replace('msd', 'N')]
         selection = (msd > 0) & (msd_error > 0) & (N > 0)
         new_tau = np.linspace(0, 1.25 * np.max(tau[selection]), 50)
-        if len(msd_error[selection]) > 4:
+        if len(msd_error[selection]) > 3:
             tracenr = int(col_name[4:])
             plt.errorbar(tau[selection], msd[selection], fmt='o', yerr=msd_error[selection], markerfacecolor="none")
             fit, pars, R2 = Ef.fit_msd(tau[selection], msd[selection], np.sqrt(N[selection]))
@@ -392,18 +392,15 @@ def analyse_msd(df):
                 plt.text(15, 22, title)
             except AttributeError:
                 plt.text(15, 22, f'R2 = {R2:.2f}')
-
-            tio.format_plot('tau (s)', 'msd (um^2)', xrange=[0, 45], yrange=[0, 30], aspect=1,
-                            save=fr"trajectory_{tracenr}\MSD_{tracenr}.png")
-            # plt.show()
+            tio.format_plot('tau (s)', 'msd (um^2)', xrange=[0, 45], yrange=[0, 30], aspect=1,  save=fr"trajectory_{tracenr}\MSD_{tracenr}.png")
             plt.cla()
             pars = np.append(len(msd_error[selection]), pars)
             pars = np.append(R2, pars)
             pars = np.append(tracenr, pars)
             pos.append(pars)
     df_diffusie = pd.DataFrame(np.asarray(pos), columns=(
-    'tracenr', 'R2', 'trace_length', 'sigma (um)', r'diffusion (um^2 s^-2)', 'velocity (um s^-1)', 'sigma_error (um)',
-    r'diffusion_error (um^2 s^-2)', 'velocity_error (um s^-1)'))
+    'tracenr', 'R2', 'trace_length', 'sigma (um)', r'D (um^2 s^-1)', 'v (um s^-1)', 'sigma_error (um)',
+    r'D_error (um^2 s^-1)', 'v_error (um s^-1)'))
     df_diffusie.to_csv('dataset_diffusie.csv', index=False)
     return
 
@@ -416,8 +413,6 @@ foldername = fr"C:\Users\Santen\Documents\Images\data_030XX"
 os.chdir(foldername)
 files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
-# 4) DATAFRAMES
-
 # 5) CALLING ANALYSIS FUNCTIONS
 # averag_images(files,0,29,foldername)
 #analyse_images(files, 0, 29, foldername, show=True)
@@ -426,7 +421,7 @@ df_pp = pd.read_csv(dataset_pp)
 
 #peak_selection(df_pp,files,10,0,500, show1=True)
 dataset_pp_selection=foldername+ "\dataset_pp_selection.csv"
-df_pp_selection=pd.read_csv(dataset_pp_selection)
+#df_pp=pd.read_csv(dataset_pp_selection)
 
 #analyse_dataset(df_pp, files)
 
@@ -436,7 +431,7 @@ df_traces = pd.read_csv(dataset_traces)
 
 dataset_msd = foldername + "\dataset_msd.csv"
 df_msd = pd.read_csv(dataset_msd)
-analyse_msd(df_msd)
+#analyse_msd(df_msd)
 
 dataset_diffusie = foldername + "\dataset_diffusie.csv"
 df_diffusie = pd.read_csv(dataset_diffusie)
@@ -456,12 +451,17 @@ df_diffusie = pd.read_csv(dataset_diffusie)
 # Ef.show_histogram_values(df_pp2,'intensity (a.u.)')
 
 # 6.1.3.) Dataset diffusie;
-# Ef.histogram_length_traces(df_link, 'red')
-# Ef.histogram_length_traces(df_traces, 'blue')
+dataset_link = foldername + "\dataset_linkpeaks.csv"
+df_link = pd.read_csv(dataset_link)
 
-Ef.show_histogram_values(df_diffusie,'sigma (um)')
-Ef.show_histogram_values(df_diffusie,  r'diffusion (um^2 s^-2)')
-Ef.show_histogram_values(df_diffusie, r'velocity (um s^-1)')
+#Ef.histogram_length_traces(df_link,  'peaks')
+#Ef.histogram_length_traces(df_traces, 'traces' )
+
+#df_diffusie=df_diffusie.loc[df_diffusie['R2']>0.5]
+
+Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1.5],yrange=[0,50], binwidth=0.1)
+Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,3],yrange=[0,100], binwidth=0.1)
+Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,2], yrange=[0,100],binwidth=0.1)
 
 # 6.2) Plots
 # 6.2.1)Plot peak positions of all
@@ -508,8 +508,7 @@ def video_traces(files, traces, df):
         for i in range(len(img_array)):
             out.write(img_array[i])
         out.release()
-video_traces(files,df_diffusie['tracenr'].value_counts().index.values,df_traces)
-
+#video_traces(files,df_diffusie['tracenr'].value_counts().index.values,df_traces)
 
 # 6.4) Pie charts
 # Ef.piechart_selection(61,19,12 )
