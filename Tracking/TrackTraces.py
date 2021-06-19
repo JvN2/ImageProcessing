@@ -219,7 +219,7 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
     plt.ioff()
     plt.errorbar(tau * 0.4, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
-    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 25], yrange=[0, 25], scale_page=0.5 ) #,save=fr"trajectory_{tracenr}\MSD_{tracenr}.png"
+    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 25], yrange=[0, 25],save=fr"trajectory_{tracenr}\MSD_{tracenr}.png", scale_page=0.5 ) #
     plt.cla()
     msd_df = pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
     msd_df[fr'error_{tracenr}'] = msd_error
@@ -459,10 +459,10 @@ df_link = pd.read_csv(dataset_link)
 
 #df_diffusie=df_diffusie.loc[df_diffusie['R2']>0.5]
 
-Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1.5],yrange=[0,50], binwidth=0.1)
-Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,3],yrange=[0,100], binwidth=0.1)
-Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,2], yrange=[0,100],binwidth=0.1)
-
+#Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1.5],yrange=[0,50], binwidth=0.1)
+#Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,3],yrange=[0,100], binwidth=0.1)
+#Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,2], yrange=[0,100],binwidth=0.1)
+Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,50], binwidth=0.1)
 # 6.2) Plots
 # 6.2.1)Plot peak positions of all
 # Ef.plot_pp(files[1], df_pp2,1)         #all pp
@@ -508,7 +508,7 @@ def video_traces(files, traces, df):
         for i in range(len(img_array)):
             out.write(img_array[i])
         out.release()
-#video_traces(files,df_diffusie['tracenr'].value_counts().index.values,df_traces)
+#video_traces(files,df_traces['tracenr'].value_counts().index.values,df_traces)
 
 # 6.4) Pie charts
 # Ef.piechart_selection(61,19,12 )
