@@ -437,14 +437,11 @@ df_link = pd.read_csv(dataset_link)
 
 def analyse_pp(df_pp, df_link, length,sort):
     filenrs=np.sort(df_pp['Filenr'].value_counts().index.values)
-    total_linked=0
-    total_not_linked=0
-    total_traces=0
+    total_linked,total_not_linked,total_traces =0,0,0
     for filenr in filenrs:
         selected_traces = df_link[df_link['Filenr'] == filenr].loc[:, 'tracenr'].values
         total_traces+=len(selected_traces)
-        linked_trace = 0
-        not_linked_trace = 0
+        linked_trace,not_linked_trace  = 0,0
         for peak in selected_traces:
             selected_tracenr=df_link[df_link['tracenr']==peak]
             if len(selected_tracenr)>length:
@@ -453,13 +450,8 @@ def analyse_pp(df_pp, df_link, length,sort):
                 not_linked_trace+=1
         total_linked+=linked_trace
         total_not_linked+=not_linked_trace
-    # print(fr"total of traces in all filenrs: {total_traces}")
-    # print(fr"total of linked traces in all filenrs: {total_linked}")
-    # print(fr"total of non linked traces in all filenrs: {total_not_linked}")
-    print(fr"Average of traces in a filenr: {total_traces/len(filenrs)}")
-    print(fr"Average of linked traces in a filenr: {total_linked/len(filenrs)}")
-    print(fr"Average of non linked traces in a filenr: {total_not_linked/len(filenrs)}")
-    print()
+    print(sort)
+    print(fr"Average of traces in a filenr: {total_traces/len(filenrs)}", '\n', fr"Average of linked traces in a filenr: {total_linked/len(filenrs)} (fraction ={(total_linked/len(filenrs))/(total_traces/len(filenrs))}%) ",'\n', fr"Average of non linked traces in a filenr: {total_not_linked/len(filenrs)} (fraction ={(total_not_linked/len(filenrs))/(total_traces/len(filenrs))}%) ")
     return
 analyse_pp(df_pp,df_link,1,'After linking peaks')
 analyse_pp(df_pp,df_traces,3,'After linking traces')
