@@ -90,7 +90,7 @@ def fit_peak(Z, show=False, center=[0, 0]):
     params.add('y0', value=center[1], min=-N / 2, max=N / 2)
     params.add('sigma', value=3, min=1, max=N)
     params.add('aspect_ratio', value=1.1, min=1, max=N / 2)
-    params.add('theta', value=0, min=0, max=180)
+    params.add('theta', value=0, miThn=0, max=180)
     params.add('intensity', value=np.max(Z) / (8 * np.pi), min=0, max=1e5)
     out = minimize(residual, params, args=(xdata,), kws={'data': Z.ravel()}, method='differential_evolution')
     out = minimize(residual, out.params, args=(xdata,), kws={'data': Z.ravel()})
@@ -227,7 +227,7 @@ def msd_trajectory(df, tracenr, pixsize_um):
     return msd_df
 
 
-# 2) FUNCTIONS FOR ANALYSE
+# 2) FUNCTIONS FOR ANALYSEo
 # 2.1)Analyse image and images
 def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, show=False):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
@@ -392,6 +392,7 @@ def analyse_msd(df):
                 plt.text(15, 22, title)
             except AttributeError:
                 plt.text(15, 22, f'R2 = {R2:.2f}')
+
             tio.format_plot('tau (s)', 'msd (um^2)', xrange=[0, 45], yrange=[0, 30], aspect=1,  save=fr"trajectory_{tracenr}\MSD_{tracenr}.png")
             plt.cla()
             pars = np.append(len(msd_error[selection]), pars)
@@ -419,6 +420,8 @@ files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 dataset_pp = foldername + "\dataset_pp.csv"
 df_pp = pd.read_csv(dataset_pp)
 
+
+
 #peak_selection(df_pp,files,10,0,500, show1=True)
 dataset_pp_selection=foldername+ "\dataset_pp_selection.csv"
 #df_pp=pd.read_csv(dataset_pp_selection)
@@ -429,6 +432,37 @@ dataset_traces = foldername + "\dataset_final_loop.csv"
 df_traces = pd.read_csv(dataset_traces)
 #analyse_trajectories(df_traces)
 
+dataset_link = foldername + "\dataset_linkpeaks.csv"
+df_link = pd.read_csv(dataset_link)
+
+def analyse_pp(df_pp, df_link, length,sort):
+    filenrs=np.sort(df_pp['Filenr'].value_counts().index.values)
+    total_linked=0
+    total_not_linked=0
+    total_traces=0
+    for filenr in filenrs:
+        selected_traces = df_link[df_link['Filenr'] == filenr].loc[:, 'tracenr'].values
+        total_traces+=len(selected_traces)
+        linked_trace = 0
+        not_linked_trace = 0
+        for peak in selected_traces:
+            selected_tracenr=df_link[df_link['tracenr']==peak]
+            if len(selected_tracenr)>length:
+                linked_trace+= 1
+            else:
+                not_linked_trace+=1
+        total_linked+=linked_trace
+        total_not_linked+=not_linked_trace
+    # print(fr"total of traces in all filenrs: {total_traces}")
+    # print(fr"total of linked traces in all filenrs: {total_linked}")
+    # print(fr"total of non linked traces in all filenrs: {total_not_linked}")
+    print(fr"Average of traces in a filenr: {total_traces/len(filenrs)}")
+    print(fr"Average of linked traces in a filenr: {total_linked/len(filenrs)}")
+    print(fr"Average of non linked traces in a filenr: {total_not_linked/len(filenrs)}")
+    print()
+    return
+analyse_pp(df_pp,df_link,1,'After linking peaks')
+analyse_pp(df_pp,df_traces,3,'After linking traces')
 dataset_msd = foldername + "\dataset_msd.csv"
 df_msd = pd.read_csv(dataset_msd)
 #analyse_msd(df_msd)
@@ -451,8 +485,6 @@ df_diffusie = pd.read_csv(dataset_diffusie)
 # Ef.show_histogram_values(df_pp2,'intensity (a.u.)')
 
 # 6.1.3.) Dataset diffusie;
-dataset_link = foldername + "\dataset_linkpeaks.csv"
-df_link = pd.read_csv(dataset_link)
 
 #Ef.histogram_length_traces(df_link,  'peaks')
 #Ef.histogram_length_traces(df_traces, 'traces' )
@@ -462,7 +494,7 @@ df_link = pd.read_csv(dataset_link)
 #Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1.5],yrange=[0,50], binwidth=0.1)
 #Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,3],yrange=[0,100], binwidth=0.1)
 #Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,2], yrange=[0,100],binwidth=0.1)
-Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,50], binwidth=0.1)
+#Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,50], binwidth=0.1)
 # 6.2) Plots
 # 6.2.1)Plot peak positions of all
 # Ef.plot_pp(files[1], df_pp2,1)         #all pp
