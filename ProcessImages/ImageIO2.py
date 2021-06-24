@@ -152,6 +152,7 @@ def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_r
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
         df_stack = select_frames(df, tile=tile, frame=frame)
         max_intensity = get_max_intensity_image(df_stack)
+        # max_intensity = get_brightest_slice(df)
         transmission = read_image(df_stack.iloc[0]['Filename'])
 
         if max_intensity_range is None:
@@ -169,7 +170,7 @@ def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_r
         # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
         # text = df_stack.iloc[0]['Filename']
         # add_text(im, f"{text[len(str(Path(text).parent.parent.parent)):]}")
-        add_scale_bar(im, 0.13)
+        add_scale_bar(im, 0.054)
         add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
         ims.append(im)
 
@@ -286,6 +287,20 @@ def merge_rgb_images(grey, red=None, green=None, blue=None):
     return im
 
 
+def get_brightest_slice(df):
+    settings = read_log(df.iloc[0]['Filename'])
+    if settings["LED (V)"] > 0:
+        df = df[df['Slice'].ne(0)]
+
+    max = 0
+    for _, row in df.iterrows():
+        im = np.reshape(np.array([read_image(row['Filename'])]), (1024, 1024))
+        if np.sum(im) > max:
+            brightest_slice = im
+            max = np.sum(im)
+    return brightest_slice
+
+
 def get_max_intensity_image(df):
     settings = read_log(df.iloc[0]['Filename'])
     if settings["LED (V)"] > 0:
@@ -370,16 +385,17 @@ def get_drift(df, tile, vmax=None):
 if __name__ == "__main__":
     if 0:
         # assembe dataframe from multiple folders/files
-        dir = Path(r'D:\Data\Noort\2photon\210521 pollen')
-        filenames = [str(f) for f in dir.glob('*\data_0[1,2]*\data_*.dat')]
+        dir = Path(r'D:\Data\Noort\2photon\210618 time_lapse_pollen')
+        filenames = [str(f) for f in dir.glob('*\data_0*\data_*.dat')]
         print(f'{len(filenames)} files found.')
         df = read_dat(filenames)
         foldername = Path(df['Filename'].iloc[0]).parent.parent
         df.to_csv(rf'{foldername.parent}\dataframe.csv')
+        print(f'Dataframe stored in {foldername.parent}\dataframe.csv')
 
     if 1:
         # get dataframe from disk
-        df = pd.read_csv(r'D:\Data\Noort\2photon\210521 pollen\dataframe.csv')
+        df = pd.read_csv(r'D:\Data\Noort\2photon\210618 time_lapse_pollen\dataframe.csv')
         print(f'Duration of experiment = {timedelta(seconds=df["Time (s)"].max() // 1)}.')
 
     if 0:
@@ -401,9 +417,9 @@ if __name__ == "__main__":
     if 1:
         # create movie
         foldername = Path(df['Filename'].iloc[0]).parent.parent
-        for tile in set(df['Tile'].astype(int)):
-        # for tile in [6]:
-            stacks_to_movie(rf'{foldername.parent}\Tile_{tile}.mp4', df, tile)
+        # for tile in list(set(df['Tile'].astype(int)))[1:]:
+        for tile in [13]:
+            stacks_to_movie(rf'{foldername.parent}\Tile_{tile}_brightest_slice.mp4', df, tile)
 
     if 0:
         # stitch mosaic
