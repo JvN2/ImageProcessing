@@ -383,19 +383,23 @@ def get_drift(df, tile, vmax=None):
         plt.show()
 
 if __name__ == "__main__":
-    if 0:
+    dir = Path(r'D:\Data\Noort\2photon\210811 time_lapse_pollen\210811')
+    df_file = rf'{dir.parent}\dataframe.csv'
+
+    refresh_df_file = False
+    if refresh_df_file:
         # assembe dataframe from multiple folders/files
-        dir = Path(r'D:\Data\Noort\2photon\210618 time_lapse_pollen')
-        filenames = [str(f) for f in dir.glob('*\data_0*\data_*.dat')]
-        print(f'{len(filenames)} files found.')
+        filenames = [str(f) for f in dir.glob('data_0*\data_*.dat')]
+
+        print(f'{len(filenames)} folders found.')
         df = read_dat(filenames)
         foldername = Path(df['Filename'].iloc[0]).parent.parent
-        df.to_csv(rf'{foldername.parent}\dataframe.csv')
-        print(f'Dataframe stored in {foldername.parent}\dataframe.csv')
-
-    if 1:
+        df.to_csv(df_file)
+        print(f'Dataframe stored in {df_file}')
+    else:
         # get dataframe from disk
-        df = pd.read_csv(r'D:\Data\Noort\2photon\210618 time_lapse_pollen\dataframe.csv')
+        df = pd.read_csv(df_file)
+        print(f'Opened dataframe: {df_file}')
         print(f'Duration of experiment = {timedelta(seconds=df["Time (s)"].max() // 1)}.')
 
     if 0:
@@ -417,9 +421,10 @@ if __name__ == "__main__":
     if 1:
         # create movie
         foldername = Path(df['Filename'].iloc[0]).parent.parent
-        # for tile in list(set(df['Tile'].astype(int)))[1:]:
-        for tile in [13]:
-            stacks_to_movie(rf'{foldername.parent}\Tile_{tile}_brightest_slice.mp4', df, tile)
+        foldername = Path(df_file).parent
+        for tile in list(set(df['Tile'].astype(int)))[1:]:
+        # for tile in [0]:
+            stacks_to_movie(rf'{foldername}\Tile_{tile}_brightest_slice.mp4', df, tile)
 
     if 0:
         # stitch mosaic
