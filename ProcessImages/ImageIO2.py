@@ -146,26 +146,26 @@ def scale_u8(array, z_range=None):
     return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
 
 
-def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5):
+def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
     ims = []
     df = select_frames(df, tile=tile)
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
         df_stack = select_frames(df, tile=tile, frame=frame)
         max_intensity = get_max_intensity_image(df_stack)
-        # max_intensity = get_brightest_slice(df)
+        #max_intensity = get_brightest_slice(df)
         transmission = read_image(df_stack.iloc[0]['Filename'])
 
         if max_intensity_range is None:
             max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
             # print(f'max_intensity_range = {max_intensity_range}')
-        if transmission_range is None:
-            transmission_range = [0.3 * np.percentile(transmission, 2), 1.5*np.percentile(transmission, 95)]
+        # if transmission_range is None:
+        transmission_range = [0.3 * np.percentile(transmission, 2), 1.5*np.percentile(transmission, 95)]
             # print(f'transmission_range = {transmission_range}')
 
         transmission = scale_u8(transmission, transmission_range)
         max_intensity = scale_u8(max_intensity, max_intensity_range)
 
-        im = merge_rgb_images(transmission, red=max_intensity)
+        im = merge_rgb_images(merge_transmission * transmission, red=max_intensity)
 
         # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
         # text = df_stack.iloc[0]['Filename']
@@ -423,8 +423,9 @@ if __name__ == "__main__":
         foldername = Path(df['Filename'].iloc[0]).parent.parent
         foldername = Path(df_file).parent
         for tile in list(set(df['Tile'].astype(int)))[1:]:
-        # for tile in [0]:
-            stacks_to_movie(rf'{foldername}\Tile_{tile}_brightest_slice.mp4', df, tile)
+        # for tile in [34]:
+            stacks_to_movie(rf'{foldername}\Tile_{tile}_transmission.mp4', df, tile)
+            stacks_to_movie(rf'{foldername}\Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
 
     if 0:
         # stitch mosaic
