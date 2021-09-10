@@ -9,7 +9,7 @@ import glob
 import os
 from natsort import natsorted, ns
 from scipy.optimize import curve_fit
-import Extra_functions as Ef
+#import Extra_functions as Ef
 import cv2
 from lmfit import Model, Parameters, minimize
 import math
@@ -221,7 +221,7 @@ def msd_trajectory(df, tracenr, pixsize_um):
     plt.ioff()
     plt.errorbar(tau * 0.4, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
     tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 15], yrange=[0, 5],
-                    save=fr"MSD\MSD_{tracenr}.png", scale_page=0.5)  #
+                    save=format(r"MSD\MSD_{tracenr}.png"), scale_page=0.5)
     plt.cla()
     msd_df = pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
     msd_df[fr'error_{tracenr}'] = msd_error
@@ -362,7 +362,7 @@ def analyse_trajectories(df):
         single_df = msd_trajectory(df, i, pixsize_um=0.112)
         msd_df.append(single_df)
     msd_df = pd.concat(msd_df, ignore_index=False, axis=1)
-    tau_df = pd.DataFrame(taus * 0.4, columns=['tau']) # time per frame = 0.4 s
+    tau_df = pd.DataFrame(taus * 0.2, columns=['tau']) # time per frame = 0.4 s
     msd_df = pd.concat([tau_df, msd_df], ignore_index=False, axis=1)
     msd_df.to_csv('dataset_msd.csv', index=False)
     return
@@ -413,13 +413,13 @@ if __name__ == "__main__":
     treshold = 5
     vmin = -20
     vmax = 50
-    foldername = fr"C:\Users\Santen\Documents\Images\data_030XX"
+    foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_029X"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
     # 5) CALLING ANALYSIS FUNCTIONS
-    # averag_images(files,0,29,foldername)
-    # analyse_images(files, 1, 101, foldername)
+    averag_images(files,0,29,foldername)
+    analyse_images(files, 1, 101, foldername)
     dataset_pp = foldername + "\dataset_pp.csv"
     df_pp = pd.read_csv(dataset_pp)
 

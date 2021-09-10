@@ -1,7 +1,7 @@
 import Tracking.TrackTraces as tt
 
 # 3) VARIABLES
-pix_size = 0.2244
+pix_size = 0.112
 treshold = 5
 vmin = -20
 vmax = 50
