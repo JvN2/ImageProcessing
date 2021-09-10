@@ -150,7 +150,7 @@ def find_peaks(image_array, width=20, treshold_sd=5, n_traces=200):
     return np.asarray(pos), image_array
 
 
-# 1.2) Functiosn dataset peak positions
+# 1.2) Function dataset peak positions
 def link_peaks(df, image, n_image, max_dist=5, show=False):
     pp_df = df.copy()
     for j in range(int(n_image) - 1):
@@ -186,7 +186,8 @@ def link_traces(df, image, gap_images, show=False, max_dist=5):
     end_df = pd.concat(end_df, ignore_index=True)
     for trace, trace_values in end_df.iterrows():
         nstart_df = start_df.drop(np.asarray(start_df.index[start_df['Filenr'] <= trace_values.loc['Filenr']]))
-        nstart_df = nstart_df.drop(np.asarray(nstart_df.index[nstart_df['Filenr'] > trace_values.loc['Filenr'] + gap_images]))
+        nstart_df = nstart_df.drop(
+            np.asarray(nstart_df.index[nstart_df['Filenr'] > trace_values.loc['Filenr'] + gap_images]))
         if len(nstart_df):
             distance_2 = np.sum(
                 (nstart_df.loc[:, ['x (pix)', 'y (pix)']] - trace_values.loc[['x (pix)', 'y (pix)']]) ** 2, axis=1)
@@ -219,7 +220,8 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
     plt.ioff()
     plt.errorbar(tau * 0.4, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
-    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 15], yrange=[0, 5], save=fr"MSD\MSD_{tracenr}.png", scale_page=0.5)  #
+    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 15], yrange=[0, 5],
+                    save=fr"MSD\MSD_{tracenr}.png", scale_page=0.5)  #
     plt.cla()
     msd_df = pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
     msd_df[fr'error_{tracenr}'] = msd_error
@@ -242,19 +244,18 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
         Ef.plot_find_peaks(peak_positions, filtered_image, file_nr, show=True)
     pp_dataframe = pd.DataFrame(peak_positions, columns=(
         'Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio', 'theta',
-        'intensity (a.u.)',
-        'R2', 'error x (pix)',
-        'error y (pix)', 'error sigma (pix)', 'error aspect_ratio', 'error theta', 'error intensity (a.u.)'))
+        'intensity (a.u.)', 'R2', 'error x (pix)', 'error y (pix)', 'error sigma (pix)', 'error aspect_ratio',
+        'error theta', 'error intensity (a.u.)'))
     return pp_dataframe, filtered_image, cleared_image
 
 
 def analyse_images(files, first_im, last_im, filefolder):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
-        image = np.asarray(tiff.imread(file).astype(float)[150:350,150:350])
+        image = np.asarray(tiff.imread(file).astype(float)[150:350, 150:350])
         original_image = image
         original_image -= np.median(original_image)
-        plt.imshow(original_image,  origin="lower", cmap='gray')
+        plt.imshow(original_image, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=fr'original images\Image{num + 1}.png')
         plt.cla()
         pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=True)
@@ -294,7 +295,7 @@ def averag_images(files, first_im, last_im, filefolder):
 
 
 # 2.2) Selection peaks
-def peak_selection(df, files, selection_ar, selection_R2, selection_int, width=20, show1=False):
+def peak_selection(df, files, selection_ar, selection_R2, selection_int):
     try:
         directory = fr"selection_peaks"
         os.mkdir(directory)
@@ -327,8 +328,6 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int, width=2
     return
 
 
-
-
 # 2.3)Analyse dataset peak positions
 def filter_image(file, highpass=4, lowpass=1):
     image = np.asarray(tiff.imread(file).astype(float))[200:800, 200:800]
@@ -344,7 +343,7 @@ def analyse_dataset(df, files):
     link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
     link_df = link_df_old.copy()
     for i in range(5):
-        link_df = link_traces(link_df, image,3, show=False)
+        link_df = link_traces(link_df, image, 3, show=False)
         # link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
     trace_df = link_df
     trace_df.to_csv('dataset_final_loop.csv', index=False)
@@ -360,10 +359,10 @@ def analyse_trajectories(df):
     msd_df = []
     taus = np.arange(1, df['Filenr'].max() + 1)
     for i in tqdm(sorted_tracelength, desc='msd'):
-        single_df = msd_trajectory(df, i, 0.112)
+        single_df = msd_trajectory(df, i, pixsize_um=0.112)
         msd_df.append(single_df)
     msd_df = pd.concat(msd_df, ignore_index=False, axis=1)
-    tau_df = pd.DataFrame(taus * 0.4, columns=['tau'])
+    tau_df = pd.DataFrame(taus * 0.4, columns=['tau']) # time per frame = 0.4 s
     msd_df = pd.concat([tau_df, msd_df], ignore_index=False, axis=1)
     msd_df.to_csv('dataset_msd.csv', index=False)
     return
@@ -392,145 +391,126 @@ def analyse_msd(df):
                         f'\n{tio.round_significance2(pars[0], pars[3], "sigma (um)")}' \
                         f'\n{tio.round_significance2(pars[1], pars[4], "D (um^2/s)")}' \
                         f'\n{tio.round_significance2(pars[2], pars[5], "v (um/s)")}'
-                plt.text(5,3, title)
+                plt.text(5, 3, title)
             except AttributeError:
-                plt.text(5,3, f'R2 = {R2:.2f}')
-            tio.format_plot('tau (s)', 'msd (um^2)', xrange=[0, 15], yrange=[0, 5], aspect=1, scale_page=0.5, save=fr"MSD_fit\MSD_{tracenr}_values.png",)
+                plt.text(5, 3, f'R2 = {R2:.2f}')
+            tio.format_plot('tau (s)', 'msd (um^2)', xrange=[0, 15], yrange=[0, 5], aspect=1, scale_page=0.5,
+                            save=fr"MSD_fit\MSD_{tracenr}_values.png", )
             plt.cla()
             pars = np.append(len(msd_error[selection]), pars)
             pars = np.append(R2, pars)
             pars = np.append(tracenr, pars)
             pos.append(pars)
     df_diffusie = pd.DataFrame(np.asarray(pos), columns=(
-    'tracenr', 'R2', 'trace_length', 'sigma (um)', r'D (um^2 s^-1)', 'v (um s^-1)', 'sigma_error (um)',
-    r'D_error (um^2 s^-1)', 'v_error (um s^-1)'))
+        'tracenr', 'R2', 'trace_length', 'sigma (um)', r'D (um^2 s^-1)', 'v (um s^-1)', 'sigma_error (um)',
+        r'D_error (um^2 s^-1)', 'v_error (um s^-1)'))
     df_diffusie.to_csv('dataset_diffusie.csv', index=False)
     return
 
 
-# 3) VARIABLES
-treshold = 5
-vmin = -20
-vmax = 50
-foldername = fr"C:\Users\Santen\Documents\Images\data_030XX"
-os.chdir(foldername)
-files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+if __name__ == "__main__":
+    # 3) VARIABLES
+    treshold = 5
+    vmin = -20
+    vmax = 50
+    foldername = fr"C:\Users\Santen\Documents\Images\data_030XX"
+    os.chdir(foldername)
+    files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
-# 5) CALLING ANALYSIS FUNCTIONS
-# averag_images(files,0,29,foldername)
-#analyse_images(files, 1, 101, foldername)
-dataset_pp = foldername + "\dataset_pp.csv"
-df_pp = pd.read_csv(dataset_pp)
+    # 5) CALLING ANALYSIS FUNCTIONS
+    # averag_images(files,0,29,foldername)
+    # analyse_images(files, 1, 101, foldername)
+    dataset_pp = foldername + "\dataset_pp.csv"
+    df_pp = pd.read_csv(dataset_pp)
 
+    # peak_selection(df_pp,files,10,0,500, show1=True)
+    dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
+    # df_pp=pd.read_csv(dataset_pp_selection)
 
+    # analyse_dataset(df_pp, files)
 
-#peak_selection(df_pp,files,10,0,500, show1=True)
-dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
-# df_pp=pd.read_csv(dataset_pp_selection)
+    dataset_traces = foldername + "\dataset_final_loop.csv"
+    df_traces = pd.read_csv(dataset_traces)
+    # analyse_trajectories(df_traces)
 
-#analyse_dataset(df_pp, files)
-
-dataset_traces = foldername + "\dataset_final_loop.csv"
-df_traces = pd.read_csv(dataset_traces)
-#analyse_trajectories(df_traces)
-
-dataset_link = foldername + "\dataset_linkpeaks.csv"
-df_link = pd.read_csv(dataset_link)
-
-def analyse_pp(df_pp, df_link, length, sort):
-    filenrs = np.sort(df_pp['Filenr'].value_counts().index.values)
-    total_linked, total_not_linked, total_traces = 0, 0, 0
-    for filenr in filenrs:
-        selected_traces = df_link[df_link['Filenr'] == filenr].loc[:, 'tracenr'].values
-        total_traces += len(selected_traces)
-        linked_trace, not_linked_trace = 0, 0
-        for peak in selected_traces:
-            selected_tracenr = df_link[df_link['tracenr'] == peak]
-            if len(selected_tracenr) > length:
-                linked_trace += 1
-            else:
-                not_linked_trace += 1
-        total_linked += linked_trace
-        total_not_linked += not_linked_trace
-    print(sort)
-    print(fr"Average of traces in a filenr: {total_traces / len(filenrs)}", '\n',
-          fr"Average of linked traces in a filenr: {total_linked / len(filenrs)} (fraction ={(total_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ",
-          '\n',
-          fr"Average of non linked traces in a filenr: {total_not_linked / len(filenrs)} (fraction ={(total_not_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ")
-    return
+    dataset_link = foldername + "\dataset_linkpeaks.csv"
+    df_link = pd.read_csv(dataset_link)
 
 
-#analyse_pp(df_pp,df_link,1,'After linking peaks')
-#analyse_pp(df_pp,df_traces,3,'After linking traces')
-
-dataset_msd = foldername + "\dataset_msd.csv"
-df_msd = pd.read_csv(dataset_msd)
-#analyse_msd(df_msd)
-
-dataset_diffusie = foldername + "\dataset_diffusie.csv"
-df_diffusie = pd.read_csv(dataset_diffusie)
-
-
-Ef.plot_peaks_colors(df_traces,df_diffusie,files,r'D (um^2 s^-1)',min=0, max=0.1,normal=False)
-Ef.plot_peaks_colors(df_traces,df_diffusie,files,'sigma (um)',min=0, max=0.25,normal=True)
-Ef.plot_peaks_colors(df_traces,df_diffusie,files, r'v (um s^-1)',min=0, max=0.5,normal=False)
-
-# 6) FUNCTIONS FOR VALIDATIONS
-# 6.1) Histograms
-# 6.1.1) Dataset peak positions and traces;circulair fitten
-# Ef.show_histogram_values(df_pp,'amplitude (a.u.)', bins=np.linspace(-20,80, 200))
-# Ef.show_histogram_values(df_traces,"sigma (pix)" ,bins= "auto")
-
-# 6.1.2) Dataset peak positons;
-# Ef.show_histogram_values(df_pp,'aspect_ratio' )
-# Ef.show_histogram_values(df_pp2,'R2')
-# Ef.show_histogram_values(df_pp2,'error x (pix)' ,bins= "auto")
-# Ef.show_histogram_values(df_pp2,'error y (pix)' ,bins= "auto")
-# Ef.show_histogram_values(df_pp2,'intensity (a.u.)')
-
-# 6.1.3.) Dataset diffusie;
-
-#Ef.histogram_length_traces(df_link,  'peaks', xrange=[0,100], yrange=[0,400])
-#Ef.histogram_length_traces(df_traces, 'traces',xrange=[0,100], yrange=[0,400] )
-
-#Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1],yrange=[0,150], binwidth=0.1,select=0.5)
-#Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,1],yrange=[0,150], binwidth=0.1, select=0.5)
-#Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,1], yrange=[0,150],binwidth=0.1,select=0.5)
-#Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,100], binwidth=0.1,select=0.5)
-
-# 6.2) Plots
+    def analyse_pp(df_pp, df_link, length, sort):
+        filenrs = np.sort(df_pp['Filenr'].value_counts().index.values)
+        total_linked, total_not_linked, total_traces = 0, 0, 0
+        for filenr in filenrs:
+            selected_traces = df_link[df_link['Filenr'] == filenr].loc[:, 'tracenr'].values
+            total_traces += len(selected_traces)
+            linked_trace, not_linked_trace = 0, 0
+            for peak in selected_traces:
+                selected_tracenr = df_link[df_link['tracenr'] == peak]
+                if len(selected_tracenr) > length:
+                    linked_trace += 1
+                else:
+                    not_linked_trace += 1
+            total_linked += linked_trace
+            total_not_linked += not_linked_trace
+        print(sort)
+        print(fr"Average of traces in a filenr: {total_traces / len(filenrs)}", '\n',
+              fr"Average of linked traces in a filenr: {total_linked / len(filenrs)} (fraction ={(total_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ",
+              '\n',
+              fr"Average of non linked traces in a filenr: {total_not_linked / len(filenrs)} (fraction ={(total_not_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ")
+        return
 
 
-# 6.3) Scatter plots
-# 6.3.1) Aspect ratio and intensity
-# Ef.show_scatterplot(df_pp,'R2', 'intensity (a.u.)')
-# Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','sigma (um)','diffusion_error (um^2 s^-2)','sigma_error (um)', error=True)
-# Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','velocity (um s^-1)','diffusion_error (um^2 s^-2)','velocity_error (um s^-1)', error=True)
-# Ef.show_scatterplot(df_diffusie,r'sigma (um)', 'velocity (um s^-1)','sigma_error (um)','velocity_error (um s^-1)', error=True)
+    # analyse_pp(df_pp,df_link,1,'After linking peaks')
+    # analyse_pp(df_pp,df_traces,3,'After linking traces')
 
-# 6.3) Follow trajectories
-def video_select(filename):
-    os.chdir(foldername + filename)
-    files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
-    img_array = []
-    for filename in files:
-        img = cv2.imread(filename)
-        height, width, layers = img.shape
-        size = (width, height)
-        img_array.append(img)
-    out = cv2.VideoWriter(fr'video_selection.avi', cv2.VideoWriter_fourcc(*'DIVX'), 1, size)
-    for i in range(len(img_array)):
-        out.write(img_array[i])
-    out.release()
+    dataset_msd = foldername + "\dataset_msd.csv"
+    df_msd = pd.read_csv(dataset_msd)
+    # analyse_msd(df_msd)
+
+    dataset_diffusie = foldername + "\dataset_diffusie.csv"
+    df_diffusie = pd.read_csv(dataset_diffusie)
+
+    # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'D (um^2 s^-1)', min=0, max=0.1, normal=False)
+    # Ef.plot_peaks_colors(df_traces, df_diffusie, files, 'sigma (um)', min=0, max=0.25, normal=True)
+    # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'v (um s^-1)', min=0, max=0.5, normal=False)
 
 
-# video_select(fr"\selection_peaks")
-def video_traces(files, traces, df):
-    for trace in tqdm(traces, desc='plot trajectory'):
-        print(trace)
-        Ef.plot_trajectory(files, df, trace, vmax=vmax, width=50, show_other_peaks=True)
-    for trace in tqdm(traces, desc='video trajectory'):
-        os.chdir(foldername + fr"\trajectory_{trace:g}")
+    # 6) FUNCTIONS FOR VALIDATIONS
+    # 6.1) Histograms
+    # 6.1.1) Dataset peak positions and traces;circulair fitten
+    # Ef.show_histogram_values(df_pp,'amplitude (a.u.)', bins=np.linspace(-20,80, 200))
+    # Ef.show_histogram_values(df_traces,"sigma (pix)" ,bins= "auto")
+
+    # 6.1.2) Dataset peak positons;
+    # Ef.show_histogram_values(df_pp,'aspect_ratio' )
+    # Ef.show_histogram_values(df_pp2,'R2')
+    # Ef.show_histogram_values(df_pp2,'error x (pix)' ,bins= "auto")
+    # Ef.show_histogram_values(df_pp2,'error y (pix)' ,bins= "auto")
+    # Ef.show_histogram_values(df_pp2,'intensity (a.u.)')
+
+    # 6.1.3.) Dataset diffusie;
+
+    # Ef.histogram_length_traces(df_link,  'peaks', xrange=[0,100], yrange=[0,400])
+    # Ef.histogram_length_traces(df_traces, 'traces',xrange=[0,100], yrange=[0,400] )
+
+    # Ef.show_histogram_values(df_diffusie,'sigma (um)', xrange=[0,1],yrange=[0,150], binwidth=0.1,select=0.5)
+    # Ef.show_histogram_values(df_diffusie,  r'D (um^2 s^-1)', xrange=[0,1],yrange=[0,150], binwidth=0.1, select=0.5)
+    # Ef.show_histogram_values(df_diffusie, r'v (um s^-1)', xrange=[0,1], yrange=[0,150],binwidth=0.1,select=0.5)
+    # Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,100], binwidth=0.1,select=0.5)
+
+    # 6.2) Plots
+
+
+    # 6.3) Scatter plots
+    # 6.3.1) Aspect ratio and intensity
+    # Ef.show_scatterplot(df_pp,'R2', 'intensity (a.u.)')
+    # Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','sigma (um)','diffusion_error (um^2 s^-2)','sigma_error (um)', error=True)
+    # Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','velocity (um s^-1)','diffusion_error (um^2 s^-2)','velocity_error (um s^-1)', error=True)
+    # Ef.show_scatterplot(df_diffusie,r'sigma (um)', 'velocity (um s^-1)','sigma_error (um)','velocity_error (um s^-1)', error=True)
+
+    # 6.3) Follow trajectories
+    def video_select(filename):
+        os.chdir(foldername + filename)
         files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
         img_array = []
         for filename in files:
@@ -538,12 +518,29 @@ def video_traces(files, traces, df):
             height, width, layers = img.shape
             size = (width, height)
             img_array.append(img)
-        out = cv2.VideoWriter(fr'video_trajactory.avi', cv2.VideoWriter_fourcc(*'DIVX'), 2, size)
+        out = cv2.VideoWriter(fr'video_selection.avi', cv2.VideoWriter_fourcc(*'DIVX'), 1, size)
         for i in range(len(img_array)):
             out.write(img_array[i])
         out.release()
 
 
-#video_traces(files, df_diffusie['tracenr'].value_counts().index.values, df_traces)
+    # video_select(fr"\selection_peaks")
+    def video_traces(files, traces, df):
+        for trace in tqdm(traces, desc='plot trajectory'):
+            print(trace)
+            Ef.plot_trajectory(files, df, trace, vmax=vmax, width=50, show_other_peaks=True)
+        for trace in tqdm(traces, desc='video trajectory'):
+            os.chdir(foldername + fr"\trajectory_{trace:g}")
+            files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
+            img_array = []
+            for filename in files:
+                img = cv2.imread(filename)
+                height, width, layers = img.shape
+                size = (width, height)
+                img_array.append(img)
+            out = cv2.VideoWriter(fr'video_trajactory.avi', cv2.VideoWriter_fourcc(*'DIVX'), 2, size)
+            for i in range(len(img_array)):
+                out.write(img_array[i])
+            out.release()
 
-
+    # video_traces(files, df_diffusie['tracenr'].value_counts().index.values, df_traces)

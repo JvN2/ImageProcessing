@@ -422,7 +422,7 @@ if __name__ == "__main__":
         # create movie
         foldername = Path(df['Filename'].iloc[0]).parent.parent
         foldername = Path(df_file).parent
-        for tile in list(set(df['Tile'].astype(int)))[1:]:
+        for tile in list(set(df['Tile'].astype(int))):
         # for tile in [34]:
             stacks_to_movie(rf'{foldername}\Tile_{tile}_transmission.mp4', df, tile)
             stacks_to_movie(rf'{foldername}\Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
