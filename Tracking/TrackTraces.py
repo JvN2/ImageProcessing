@@ -9,7 +9,7 @@ import glob
 import os
 from natsort import natsorted, ns
 from scipy.optimize import curve_fit
-#import Extra_functions as Ef
+import Extra_functions as Ef
 import cv2
 from lmfit import Model, Parameters, minimize
 import math
@@ -231,7 +231,7 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
 # 2) FUNCTIONS FOR ANALYSEo
 # 2.1)Analyse image and images
-def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, show=False):
+def analyse_image(image, file_nr, filefolder, filename, highpass, lowpass, show=False):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
@@ -252,18 +252,18 @@ def analyse_image(image, file_nr, filefolder, filename, highpass=4, lowpass=1, s
 def analyse_images(files, first_im, last_im, filefolder):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
-        image = np.asarray(tiff.imread(file).astype(float)[150:350, 150:350])
+        image = np.asarray(tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
         original_image = image
         original_image -= np.median(original_image)
         plt.imshow(original_image, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=fr'original images\Image{num + 1}.png')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/original images/Image{num + 1}.png')
         plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, show=True)
-        plt.imshow(filtered_image, vmin=-20, vmax=75, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=fr'filtered images\Image{num + 1}.png')
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, highpass, lowpass, show=False)
+        plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/filtered images/Image{num + 1}.png')
         plt.cla()
-        plt.imshow(cleared_image, vmin=-20, vmax=75, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=fr'cleared images\Image{num + 1}.png')
+        plt.imshow(cleared_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/cleared images/Image{num + 1}.png')
         plt.cla()
         # Ef.show_intensity_histogram_filename(image.flatten())
         # Ef.show_intensity_histogram_filename(filtered_image.flatten())
@@ -275,21 +275,23 @@ def analyse_images(files, first_im, last_im, filefolder):
     return all_pp_df
 
 
-def averag_images(files, first_im, last_im, filefolder):
+def averag_images(files, first_im, last_im):
     for num, file in enumerate(files[first_im:last_im]):
         try:
-            image += np.asarray(tiff.imread(file).astype(float))[200:800, 200:800]
+            image += np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max,
+                     image_size_min:image_size_max]
         except NameError:
             plt.figure(0)
-            image = np.asarray(tiff.imread(file).astype(float))[200:800, 200:800]
+            image = np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max,
+                    image_size_min:image_size_max]
             image -= np.median(image)
-            plt.imshow(image, cmap='gray', origin="lower", vmin=-20, vmax=50)
+            plt.imshow(image, cmap='gray', origin="lower", vmin=vmin, vmax=vmax)
             tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, title='First')
 
     image /= (num + 1)
     image -= np.median(image)
     plt.figure(1)
-    plt.imshow(image, cmap='gray', origin="lower", vmin=-20, vmax=50)
+    plt.imshow(image, cmap='gray', origin="lower", vmin=vmin, vmax=vmax)
     tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, title='Averaged')
     return
 
@@ -409,17 +411,23 @@ def analyse_msd(df):
 
 
 if __name__ == "__main__":
-    # 3) VARIABLES
+    # 3) VARIABLES FOR
     treshold = 5
-    vmin = -20
-    vmax = 50
-    foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_029X"
+    vmin = -10
+    vmax = 100
+    first_im = 10
+    last_im = 12
+    image_size_min = 75
+    image_size_max = 500
+    highpass=4
+    lowpass=1
+    foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
     # 5) CALLING ANALYSIS FUNCTIONS
-    averag_images(files,0,29,foldername)
-    analyse_images(files, 1, 101, foldername)
+    #averag_images(files,first_im,last_im,foldername)
+    analyse_images(files, first_im, last_im, foldername)
     dataset_pp = foldername + "\dataset_pp.csv"
     df_pp = pd.read_csv(dataset_pp)
 
@@ -514,11 +522,11 @@ if __name__ == "__main__":
         files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
         img_array = []
         for filename in files:
-            img = cv2.imread(filename)
+            img = opencv.imread(filename)
             height, width, layers = img.shape
             size = (width, height)
             img_array.append(img)
-        out = cv2.VideoWriter(fr'video_selection.avi', cv2.VideoWriter_fourcc(*'DIVX'), 1, size)
+        out = opencv.VideoWriter(fr'video_selection.avi', opencv.VideoWriter_fourcc(*'DIVX'), 1, size)
         for i in range(len(img_array)):
             out.write(img_array[i])
         out.release()
@@ -534,11 +542,11 @@ if __name__ == "__main__":
             files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
             img_array = []
             for filename in files:
-                img = cv2.imread(filename)
+                img = opencv.imread(filename)
                 height, width, layers = img.shape
                 size = (width, height)
                 img_array.append(img)
-            out = cv2.VideoWriter(fr'video_trajactory.avi', cv2.VideoWriter_fourcc(*'DIVX'), 2, size)
+            out = opencv.VideoWriter(fr'video_trajactory.avi', opencv.VideoWriter_fourcc(*'DIVX'), 2, size)
             for i in range(len(img_array)):
                 out.write(img_array[i])
             out.release()
