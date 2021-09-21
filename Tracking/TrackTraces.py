@@ -304,7 +304,7 @@ def averag_images(files, first_im, last_im):
 def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax):
     try:
         directory = fr"selection_peaks"
-        os.mkdir(directory)
+        mkdir(directory)
     except FileExistsError:
         pass
     empty_pp_df = []
@@ -416,27 +416,27 @@ def analyse_msd(df):
 
 if __name__ == "__main__":
     # 3) VARIABLES FOR
-    treshold = 5
-    vmin = 20
-    vmax = 40
-    first_im = 10
-    last_im = 11
-    image_size_min = 75
-    image_size_max = 500
-    highpass=4
-    lowpass=1
+    treshold        = 5
+    vmin            = 20
+    vmax            = 40
+    first_im        = 10
+    last_im         = 11
+    image_size_min  = 75
+    image_size_max  = 500
+    highpass        = 4
+    lowpass         = 1
 
 #Peak fitting
-    threshold_sd=5
-    spot_width= 10
-    n_traces = 20
-    selection_ar = 10
-    selection_R2 = 0
-    selection_int = 500
+    threshold_sd    = 5
+    spot_width      = 10
+    n_traces        = 20
+    selection_ar    = 10
+    selection_R2    = 0
+    selection_int   = 500
 
 #link Traces
-    link_dist = 5
-    gap_images = 3
+    link_dist       = 5
+    gap_images      = 3
 
     foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
     os.chdir(foldername)
