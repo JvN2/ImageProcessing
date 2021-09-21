@@ -59,6 +59,7 @@ def check_roi(loc, image, width):
 
 def fit_peak(Z, show=False, center=[0, 0]):
     # Our function to fit is a two-dimensional Gaussian elipse
+    # noinspection PyPep8Naming
     def gaussian_elipse(x, y, x0, y0, sigma, aspect_ratio, theta, intensity):
         theta = math.radians(theta)
         sigma_X = sigma
@@ -235,7 +236,7 @@ def analyse_image(image, file_nr, filefolder, filename, highpass, lowpass, show=
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
-    peak_positions, cleared_image = find_peaks(bandpass_image, n_traces=1000, width=10, treshold_sd=treshold)
+    peak_positions, cleared_image = find_peaks(bandpass_image, width=10, treshold_sd=treshold, n_traces=n_traces)
     peak_positions = [np.append([filefolder + fr"\{filename}", file_nr, -1], p) for p in peak_positions]
     if file_nr == 0:
         for i, _ in enumerate(peak_positions):
@@ -258,7 +259,7 @@ def analyse_images(files, first_im, last_im, filefolder):
         plt.imshow(original_image, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/original images/Image{num + 1}.png')
         plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, highpass, lowpass, show=False)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, highpass, lowpass)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/filtered images/Image{num + 1}.png')
         plt.cla()
@@ -413,22 +414,26 @@ def analyse_msd(df):
 if __name__ == "__main__":
     # 3) VARIABLES FOR
     treshold = 5
-    vmin = -10
-    vmax = 100
+    vmin = 20
+    vmax = 40
     first_im = 10
-    last_im = 12
+    last_im = 11
     image_size_min = 75
     image_size_max = 500
     highpass=4
     lowpass=1
+
+#Peak fitting
+    n_traces = 200
+
     foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
     # 5) CALLING ANALYSIS FUNCTIONS
-    #averag_images(files,first_im,last_im,foldername)
+    averag_images(files,first_im,last_im)
     analyse_images(files, first_im, last_im, foldername)
-    dataset_pp = foldername + "\dataset_pp.csv"
+    dataset_pp = foldername + "/dataset_pp.csv"
     df_pp = pd.read_csv(dataset_pp)
 
     # peak_selection(df_pp,files,10,0,500, show1=True)
