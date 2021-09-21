@@ -16,6 +16,7 @@ import math
 import warnings
 import TraceIO as tio
 from tqdm import tqdm
+import os.path
 
 
 # 1) FUNCTIONS FOR ANALYSE
@@ -298,7 +299,7 @@ def averag_images(files, first_im, last_im):
 
 
 # 2.2) Selection peaks
-def peak_selection(df, files, selection_ar, selection_R2, selection_int):
+def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax):
     try:
         directory = fr"selection_peaks"
         os.mkdir(directory)
@@ -307,7 +308,7 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int):
     empty_pp_df = []
     len_file = 0
     len_selection = 0
-    for num, file in enumerate(files[0:29]):
+    for num, file in enumerate(files[first_im:last_im]):
         df_file = df.loc[df['Filenr'] == num]
         df_selection = df_file.loc[df_file['aspect_ratio'] < selection_ar].loc[
             df_file.loc[df_file['aspect_ratio'] < selection_ar]['R2'] > selection_R2]
@@ -315,14 +316,14 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int):
         len_file = len(df_file) + len_file
         len_selection = len(df_selection) + len_selection
         empty_pp_df.append(df_selection)
-        image_original = np.asarray(tiff.imread(files[num]).astype(float))[200:800, 200:800]
+        image_original = np.asarray(tiff.imread(files[num]).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
         image_original -= np.median(image_original)
-        plt.imshow(image_original, origin="lower", vmin=-20, vmax=80, cmap='gray')
+        plt.imshow(image_original, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
         plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                  color="red", ms=15)
         plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                  color="blue", ms=15)
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, xrange=[0, 599], yrange=[0, 599],
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, xrange=[0, 350], yrange=[0, 350],
                         save=fr"selection_peaks\Image {num}.jpg", scale_page=0.5)
         plt.cla()
 
@@ -332,16 +333,16 @@ def peak_selection(df, files, selection_ar, selection_R2, selection_int):
 
 
 # 2.3)Analyse dataset peak positions
-def filter_image(file, highpass=4, lowpass=1):
-    image = np.asarray(tiff.imread(file).astype(float))[200:800, 200:800]
+def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
+    image = np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
     return filtered_image
 
 
-def analyse_dataset(df, files):
-    image = filter_image(files[0])
+def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass):
+    image = filter_image(files[0], image_size_min, image_size_max, highpass, lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
     link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
     link_df = link_df_old.copy()
@@ -425,24 +426,43 @@ if __name__ == "__main__":
 
 #Peak fitting
     threshold_sd=5
-    spot_width=10
+    spot_width= 10
     n_traces = 20
+    selection_ar = 10
+    selection_R2 = 0
+    selection_int = 500
+
+#link Traces
+
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
-    # 5) CALLING ANALYSIS FUNCTIONS
-    averag_images(files,first_im,last_im)
-    analyse_images(files, first_im, last_im, foldername, highpass, lowpass, threshold_sd, spot_width, n_traces)
-    dataset_pp = foldername + "/dataset_pp.csv"
-    df_pp = pd.read_csv(dataset_pp)
+    #read if dataset_pp exists, otherwise create it
+    if os.path.isfile(rf'{foldername}\dataset_pp.csv'):
+        dataset_pp = foldername + "\dataset_pp.csv"
+        df_pp = pd.read_csv(dataset_pp)
+        print(rf'Opened dataframe: {foldername}\dataset_pp.csv')
+    else:
+        averag_images(files,first_im,last_im)
+        analyse_images(files, first_im, last_im, foldername, highpass, lowpass, threshold_sd, spot_width, n_traces)
+        dataset_pp = foldername + "\dataset_pp.csv"
+        df_pp = pd.read_csv(dataset_pp)
+        print(rf'Dataframe stored in {foldername}\dataset_pp.csv')
+    #read if dataset_pp_selection exists, otherwise create it
+    if os.path.isfile(rf'{foldername}\dataset_pp_selection.csv'):
+        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
+        df_pp = pd.read_csv(dataset_pp_selection)
+        print(rf'Opened dataframe: {foldername}\dataset_pp_selection.csv')
+    else:
+        peak_selection(df_pp, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax)
+        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
+        print(rf'Dataframe stored in {foldername}\dataset_pp_selection.csv')
+        df_pp=pd.read_csv(dataset_pp_selection)
 
-    peak_selection(df_pp,files,10,0,500, show1=True)
-    dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
-    # df_pp=pd.read_csv(dataset_pp_selection)
-
-    # analyse_dataset(df_pp, files)
+    analyse_dataset(df_pp, files, image_size_min, image_size_max, highpass, lowpass)
+    print(rf'Dataframe stored in {foldername}\dataset_final_loop.csv')
 
     dataset_traces = foldername + "\dataset_final_loop.csv"
     df_traces = pd.read_csv(dataset_traces)
