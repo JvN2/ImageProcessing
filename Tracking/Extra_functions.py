@@ -49,9 +49,9 @@ def plot_fit_peaks(popt, err, X, Y, Z, fit):
     plt.show()
 
 
-def plot_find_peaks(peak_positions, filtered_image, filenr, show=False):
+def plot_find_peaks(peak_positions, filtered_image, filenr, vmin, vmax, show):
     if show:
-        plt.imshow(filtered_image, vmin=-20, vmax=vmax, origin='lower')
+        plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin='lower')
         plt.gray()
         for trace_nr, pos in enumerate(peak_positions):
             plt.plot(float(pos[p_ycoord]), float(pos[p_xcoord]), marker='o', markerfacecolor='none', color='orange')

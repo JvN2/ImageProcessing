@@ -175,7 +175,7 @@ def link_peaks(df, image, n_image, max_dist=5, show=False):
     return pp_df
 
 
-def link_traces(df, image, gap_images, link_dist, show=False):
+def link_traces(df, image, gap_images, link_dist, show):
     pp_df = df.copy()
     start_df = []
     end_df = []
@@ -233,17 +233,17 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
 # 2) FUNCTIONS FOR ANALYSEo
 # 2.1)Analyse image and images
-def analyse_image(image, file_nr, filefolder, filename, highpass, lowpass, spot_width, treshold_sd, n_traces, show=False):
+def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin, vmax, spot_width, threshold_sd, n_traces, show):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
-    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width, treshold_sd, n_traces)
+    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width=spot_width, treshold_sd=threshold_sd, n_traces=n_traces)
     peak_positions = [np.append([filefolder + fr"\{filename}", file_nr, -1], p) for p in peak_positions]
     if file_nr == 0:
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, filtered_image, file_nr, show=True)
+        Ef.plot_find_peaks(peak_positions, filtered_image, file_nr, vmin=vmax, vmax=vmin, show=True)
     pp_dataframe = pd.DataFrame(peak_positions, columns=(
         'Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio', 'theta',
         'intensity (a.u.)', 'R2', 'error x (pix)', 'error y (pix)', 'error sigma (pix)', 'error aspect_ratio',
@@ -251,7 +251,7 @@ def analyse_image(image, file_nr, filefolder, filename, highpass, lowpass, spot_
     return pp_dataframe, filtered_image, cleared_image
 
 
-def analyse_images(files, first_im, last_im, filefolder, highpass, lowpass, spot_width, threshold_sd, n_traces):
+def analyse_images(files, first_im, last_im, filefolder, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
         image = np.asarray(tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
@@ -260,7 +260,9 @@ def analyse_images(files, first_im, last_im, filefolder, highpass, lowpass, spot
         plt.imshow(original_image, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/original images/Image{num + 1}.png')
         plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, filefolder, file, highpass, lowpass, spot_width, threshold_sd, n_traces)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, filefolder=filefolder, highpass=highpass,
+                                                             lowpass=lowpass, vmin=vmin, vmax=vmax, spot_width=spot_width,
+                                                             threshold_sd=threshold_sd, n_traces=n_traces, show=show)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/filtered images/Image{num + 1}.png')
         plt.cla()
@@ -318,7 +320,7 @@ def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, sel
         empty_pp_df.append(df_selection)
         image_original = np.asarray(tiff.imread(files[num]).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
         image_original -= np.median(image_original)
-        plt.imshow(image_original, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
+        plt.imshow(image_original, cmap='gray', norm=None, aspect=None, interpolation=None, alpha=None, vmin=vmin, vmax=vmax, origin="lower",)
         plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                  color="red", ms=15)
         plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none",
@@ -335,19 +337,19 @@ def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, sel
 # 2.3)Analyse dataset peak positions
 def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
     image = np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
-    highpass_image = image - ndimage.gaussian_filter(image, highpass=highpass)
-    bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass=lowpass)
+    highpass_image = image - ndimage.gaussian_filter(image, highpass)
+    bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
     return filtered_image
 
 
-def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass, gap_images, show=False):
-    image = filter_image(files[0], image_size_min, image_size_max, highpass, lowpass)
+def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show):
+    image = filter_image(files[0], image_size_min=image_size_min, image_size_max=image_size_max, highpass=highpass, lowpass=lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
     link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
     link_df = link_df_old.copy()
     for i in range(5):
-        link_df = link_traces(link_df, image, gap_images=gap_images, show=show)
+        link_df = link_traces(link_df, image, gap_images=gap_images, link_dist=link_dist, show=show)
         # link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
     trace_df = link_df
     trace_df.to_csv('dataset_final_loop.csv', index=False)
@@ -436,37 +438,37 @@ if __name__ == "__main__":
     link_dist = 5
     gap_images = 3
 
-    foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
+    foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
     #read if dataset_pp exists, otherwise create it
-    if os.path.isfile(rf'{foldername}\dataset_pp.csv'):
-        dataset_pp = foldername + "\dataset_pp.csv"
+    if os.path.isfile(rf'{foldername}/dataset_pp.csv'):
+        dataset_pp = foldername + "/dataset_pp.csv"
         df_pp = pd.read_csv(dataset_pp)
-        print(rf'Opened dataframe: {foldername}\dataset_pp.csv')
+        print(rf'Reading dataframe: {foldername}/dataset_pp.csv')
     else:
         averag_images(files,first_im,last_im)
-        analyse_images(files, first_im, last_im, foldername, highpass, lowpass, threshold_sd, spot_width, n_traces)
-        dataset_pp = foldername + "\dataset_pp.csv"
+        analyse_images(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
+        dataset_pp = foldername + "/dataset_pp.csv"
         df_pp = pd.read_csv(dataset_pp)
-        print(rf'Dataframe stored in {foldername}\dataset_pp.csv')
+        print(rf'Dataframe stored in {foldername}/dataset_pp.csv')
     #read if dataset_pp_selection exists, otherwise create it
-    if os.path.isfile(rf'{foldername}\dataset_pp_selection.csv'):
-        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
+    if os.path.isfile(rf'{foldername}/dataset_pp_selection.csv'):
+        dataset_pp_selection = foldername + "/dataset_pp_selection.csv"
         df_pp = pd.read_csv(dataset_pp_selection)
-        print(rf'Opened dataframe: {foldername}\dataset_pp_selection.csv')
+        print(rf'Reading dataframe: {foldername}/dataset_pp_selection.csv')
     else:
         peak_selection(df_pp, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax)
-        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
-        print(rf'Dataframe stored in {foldername}\dataset_pp_selection.csv')
+        dataset_pp_selection = foldername + "/dataset_pp_selection.csv"
+        print(rf'Dataframe stored in {foldername}/dataset_pp_selection.csv')
         df_pp=pd.read_csv(dataset_pp_selection)
 
 
 
 
     analyse_dataset(df_pp, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=True)
-    print(rf'Dataframe stored in {foldername}\dataset_final_loop.csv')
+    print(rf'Dataframe stored in {foldername}/dataset_final_loop.csv')
 
 
 
