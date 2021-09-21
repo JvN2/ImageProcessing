@@ -175,7 +175,7 @@ def link_peaks(df, image, n_image, max_dist=5, show=False):
     return pp_df
 
 
-def link_traces(df, image, gap_images, show=False, max_dist=5):
+def link_traces(df, image, gap_images, link_dist, show=False):
     pp_df = df.copy()
     start_df = []
     end_df = []
@@ -193,7 +193,7 @@ def link_traces(df, image, gap_images, show=False, max_dist=5):
         if len(nstart_df):
             distance_2 = np.sum(
                 (nstart_df.loc[:, ['x (pix)', 'y (pix)']] - trace_values.loc[['x (pix)', 'y (pix)']]) ** 2, axis=1)
-            if np.min(distance_2) < max_dist ** 2:
+            if np.min(distance_2) < link_dist ** 2:
                 old_tracenr = nstart_df.iloc[np.argmin(distance_2)]['tracenr']
                 pp_df['tracenr'] = pp_df['tracenr'].replace([old_tracenr], trace_values.loc['tracenr'])
     if show:
@@ -335,19 +335,19 @@ def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, sel
 # 2.3)Analyse dataset peak positions
 def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
     image = np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
-    highpass_image = image - ndimage.gaussian_filter(image, highpass)
-    bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
+    highpass_image = image - ndimage.gaussian_filter(image, highpass=highpass)
+    bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass=lowpass)
     filtered_image = np.copy(bandpass_image)
     return filtered_image
 
 
-def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass):
+def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass, gap_images, show=False):
     image = filter_image(files[0], image_size_min, image_size_max, highpass, lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
     link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
     link_df = link_df_old.copy()
     for i in range(5):
-        link_df = link_traces(link_df, image, 3, show=False)
+        link_df = link_traces(link_df, image, gap_images=gap_images, show=show)
         # link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
     trace_df = link_df
     trace_df.to_csv('dataset_final_loop.csv', index=False)
@@ -433,7 +433,8 @@ if __name__ == "__main__":
     selection_int = 500
 
 #link Traces
-
+    link_dist = 5
+    gap_images = 3
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     os.chdir(foldername)
@@ -461,8 +462,17 @@ if __name__ == "__main__":
         print(rf'Dataframe stored in {foldername}\dataset_pp_selection.csv')
         df_pp=pd.read_csv(dataset_pp_selection)
 
-    analyse_dataset(df_pp, files, image_size_min, image_size_max, highpass, lowpass)
+
+
+
+    analyse_dataset(df_pp, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=True)
     print(rf'Dataframe stored in {foldername}\dataset_final_loop.csv')
+
+
+
+
+
+
 
     dataset_traces = foldername + "\dataset_final_loop.csv"
     df_traces = pd.read_csv(dataset_traces)
