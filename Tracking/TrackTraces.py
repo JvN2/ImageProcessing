@@ -17,6 +17,7 @@ import warnings
 import TraceIO as tio
 from tqdm import tqdm
 import os.path
+from mkdir import mkdir
 
 
 # 1) FUNCTIONS FOR ANALYSE
@@ -438,30 +439,30 @@ if __name__ == "__main__":
     link_dist       = 5
     gap_images      = 3
 
-    foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
+    foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     os.chdir(foldername)
     files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
 
     #read if dataset_pp exists, otherwise create it
-    if os.path.isfile(rf'{foldername}/dataset_pp.csv'):
-        dataset_pp = foldername + "/dataset_pp.csv"
+    if os.path.isfile(rf'{foldername}\dataset_pp.csv'):
+        dataset_pp = foldername + "\dataset_pp.csv"
         df_pp = pd.read_csv(dataset_pp)
-        print(rf'Reading dataframe: {foldername}/dataset_pp.csv')
+        print(rf'Reading dataframe: {foldername}\dataset_pp.csv')
     else:
         averag_images(files,first_im,last_im)
         analyse_images(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
-        dataset_pp = foldername + "/dataset_pp.csv"
+        dataset_pp = foldername + "\dataset_pp.csv"
         df_pp = pd.read_csv(dataset_pp)
-        print(rf'Dataframe stored in {foldername}/dataset_pp.csv')
+        print(rf'Dataframe stored in {foldername}\dataset_pp.csv')
     #read if dataset_pp_selection exists, otherwise create it
-    if os.path.isfile(rf'{foldername}/dataset_pp_selection.csv'):
-        dataset_pp_selection = foldername + "/dataset_pp_selection.csv"
+    if os.path.isfile(rf'{foldername}\dataset_pp_selection.csv'):
+        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
         df_pp = pd.read_csv(dataset_pp_selection)
-        print(rf'Reading dataframe: {foldername}/dataset_pp_selection.csv')
+        print(rf'Reading dataframe: {foldername}\dataset_pp_selection.csv')
     else:
         peak_selection(df_pp, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax)
-        dataset_pp_selection = foldername + "/dataset_pp_selection.csv"
-        print(rf'Dataframe stored in {foldername}/dataset_pp_selection.csv')
+        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
+        print(rf'Dataframe stored in {foldername}\dataset_pp_selection.csv')
         df_pp=pd.read_csv(dataset_pp_selection)
 
 
