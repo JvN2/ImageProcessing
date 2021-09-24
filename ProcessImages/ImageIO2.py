@@ -383,10 +383,10 @@ def get_drift(df, tile, vmax=None):
         plt.show()
 
 if __name__ == "__main__":
-    dir = Path(r'D:\Data\Noort\2photon\210811 time_lapse_pollen\210811')
+    dir = Path(r'D:\Data\Noort\2photon\210917 time_lapse pollen dr5v2')
     df_file = rf'{dir.parent}\dataframe.csv'
 
-    refresh_df_file = False
+    refresh_df_file = True
     if refresh_df_file:
         # assembe dataframe from multiple folders/files
         filenames = [str(f) for f in dir.glob('data_0*\data_*.dat')]

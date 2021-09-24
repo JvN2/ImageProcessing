@@ -203,7 +203,7 @@ def link_traces(df, image, gap_images, link_dist, show):
 
 
 # 1.3) Functions dataset traces
-def msd_trajectory(df, tracenr, pixsize_um):
+def msd_trajectory(df, tracenr, pixsize_um=0.112, frametime_s=0.4, show=False):
     positions = df[df['tracenr'] == tracenr].loc[:, ['x (pix)', 'y (pix)']].values * pixsize_um
     filenrs = df[df['tracenr'] == tracenr].loc[:, ['Filenr']].values
     tau_max = int(np.max(filenrs) - np.min(filenrs))
@@ -221,11 +221,13 @@ def msd_trajectory(df, tracenr, pixsize_um):
         msd_error = np.asarray([np.std(sd[sd != 0]) for sd in squared_displacements])
     msd_error[N != 0] = np.divide(msd_error[N != 0], np.sqrt(N[N != 0]))
 
-    plt.ioff()
-    plt.errorbar(tau * 0.4, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
-    tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 15], yrange=[0, 5],
-                    save=format(r"MSD\MSD_{tracenr}.png"), scale_page=0.5)
-    plt.cla()
+    if show:
+        plt.ioff()
+        plt.errorbar(tau * frametime_s, msd, fmt='o', yerr=msd_error, markerfacecolor="none")
+        tio.format_plot(r'$\tau$ (s)', r'msd ($\mu m^{2}$)', aspect=1, xrange=[0, 15], yrange=[0, 5],
+                        save=format(r"MSD\MSD_{tracenr}.png"), scale_page=0.5)
+        plt.cla()
+        
     msd_df = pd.DataFrame(msd, columns=[fr'msd_{tracenr}'])
     msd_df[fr'error_{tracenr}'] = msd_error
     msd_df[fr'N_{tracenr}'] = N
@@ -234,11 +236,13 @@ def msd_trajectory(df, tracenr, pixsize_um):
 
 # 2) FUNCTIONS FOR ANALYSEo
 # 2.1)Analyse image and images
-def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin, vmax, spot_width, threshold_sd, n_traces, show):
+def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin, vmax, spot_width, threshold_sd,
+                  n_traces, show):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
-    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width=spot_width, treshold_sd=threshold_sd, n_traces=n_traces)
+    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width=spot_width, treshold_sd=threshold_sd,
+                                               n_traces=n_traces)
     peak_positions = [np.append([filefolder + fr"\{filename}", file_nr, -1], p) for p in peak_positions]
     if file_nr == 0:
         for i, _ in enumerate(peak_positions):
@@ -252,31 +256,36 @@ def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin,
     return pp_dataframe, filtered_image, cleared_image
 
 
-def analyse_images(files, first_im, last_im, filefolder, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show):
+def find_peaks(files, first_im, last_im, filefolder, highpass, lowpass, vmin, vmax, threshold_sd, spot_width,
+               n_traces, show):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
-        image = np.asarray(tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
+        image = np.asarray(
+            tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
         original_image = image
         original_image -= np.median(original_image)
         plt.imshow(original_image, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/original images/Image{num + 1}.png')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
+                        save=foldername + fr'/original images/Image{num + 1}.png')
         plt.cla()
         pp_df, filtered_image, cleared_image = analyse_image(image, num, file, filefolder=filefolder, highpass=highpass,
-                                                             lowpass=lowpass, vmin=vmin, vmax=vmax, spot_width=spot_width,
+                                                             lowpass=lowpass, vmin=vmin, vmax=vmax,
+                                                             spot_width=spot_width,
                                                              threshold_sd=threshold_sd, n_traces=n_traces, show=show)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/filtered images/Image{num + 1}.png')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
+                        save=foldername + fr'/filtered images/Image{num + 1}.png')
         plt.cla()
         plt.imshow(cleared_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save= foldername + fr'/cleared images/Image{num + 1}.png')
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
+                        save=foldername + fr'/cleared images/Image{num + 1}.png')
         plt.cla()
-        #Ef.show_intensity_histogram_filename(image.flatten())
-        #Ef.show_intensity_histogram_filename(filtered_image.flatten())
-        #Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
+        # Ef.show_intensity_histogram_filename(image.flatten())
+        # Ef.show_intensity_histogram_filename(filtered_image.flatten())
+        # Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
 
         empty_pp_df.append(pp_df)
     all_pp_df = pd.concat(empty_pp_df, ignore_index=False)
-    all_pp_df.to_csv('dataset_pp.csv', index=False)
     return all_pp_df
 
 
@@ -301,37 +310,37 @@ def averag_images(files, first_im, last_im):
     return
 
 
-# 2.2) Selection peaks
-def peak_selection(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax):
+def select_peaks(df, selection_ar, selection_R2, selection_int):
+    selection = df['aspect_ratio'] < selection_ar
+    selection *= df['R2'] > selection_R2
+    selection *= df['intensity (a.u.)'] < selection_int
+    df['selected'] = selection
+    return df
+
+
+def plot_peaks(df, files, first_im, last_im, image_size_min, image_size_max, vmin, vmax):
     try:
-        directory = fr"selection_peaks"
+        directory = fr"peak_images"
         mkdir(directory)
     except FileExistsError:
         pass
-    empty_pp_df = []
-    len_file = 0
-    len_selection = 0
-    for num, file in enumerate(files[first_im:last_im]):
+
+    df = df.iloc['selected' == 1]
+    for num in range(first_im, last_im + 1):
         df_file = df.loc[df['Filenr'] == num]
-        df_selection = df_file.loc[df_file['aspect_ratio'] < selection_ar].loc[
-            df_file.loc[df_file['aspect_ratio'] < selection_ar]['R2'] > selection_R2]
-        df_selection = df_selection.loc[df_selection['intensity (a.u.)'] < selection_int]
-        len_file = len(df_file) + len_file
-        len_selection = len(df_selection) + len_selection
-        empty_pp_df.append(df_selection)
-        image_original = np.asarray(tiff.imread(files[num]).astype(float))[image_size_min:image_size_max, image_size_min:image_size_max]
-        image_original -= np.median(image_original)
-        plt.imshow(image_original, cmap='gray', norm=None, aspect=None, interpolation=None, alpha=None, vmin=vmin, vmax=vmax, origin="lower",)
+
+        image = np.asarray(tiff.imread(files[num]).astype(float))[image_size_min:image_size_max,
+                image_size_min:image_size_max]
+        image -= np.median(image)
+        plt.imshow(image, cmap='gray', norm=None, aspect=None, interpolation=None, alpha=None, vmin=vmin,
+                   vmax=vmax, origin="lower", )
         plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                  color="red", ms=15)
-        plt.plot(df_selection.loc[:, 'y (pix)'], df_selection.loc[:, 'x (pix)'], "o", markerfacecolor="none",
+        plt.plot(df_file.loc[:, 'y (pix)'], df_file.loc[:, 'x (pix)'], "o", markerfacecolor="none",
                  color="blue", ms=15)
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, xrange=[0, 350], yrange=[0, 350],
-                        save=fr"selection_peaks\Image {num}.jpg", scale_page=0.5)
+                        save=fr"peak_images\Image {num}.jpg", scale_page=0.5)
         plt.cla()
-
-    dataset_pp_selection = pd.concat(empty_pp_df, ignore_index=False)
-    dataset_pp_selection.to_csv('dataset_pp_selection.csv', index=False)
     return
 
 
@@ -344,17 +353,14 @@ def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
     return filtered_image
 
 
-def analyse_dataset(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show):
-    image = filter_image(files[0], image_size_min=image_size_min, image_size_max=image_size_max, highpass=highpass, lowpass=lowpass)
+def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=False):
+    image = filter_image(files[0], image_size_min=image_size_min, image_size_max=image_size_max, highpass=highpass,
+                         lowpass=lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
-    link_df_old = link_peaks(df, image, len(sorted_tracelength), show=False)
-    link_df = link_df_old.copy()
-    for i in range(5):
-        link_df = link_traces(link_df, image, gap_images=gap_images, link_dist=link_dist, show=show)
-        # link_df.to_csv(fr'dataset_linktraces_loop{i}_v2.csv', index=False)
-    trace_df = link_df
-    trace_df.to_csv('dataset_final_loop.csv', index=False)
-    return link_df_old, trace_df
+    df = link_peaks(df, image, len(sorted_tracelength), show=show)
+    df = link_traces(df, image, gap_images=gap_images, link_dist=link_dist, show=show)
+    df.to_csv('dataset_final_loop.csv', index=False)
+    return df
 
 
 # 2.4)Analyse dataset traces
@@ -369,7 +375,7 @@ def analyse_trajectories(df):
         single_df = msd_trajectory(df, i, pixsize_um=0.112)
         msd_df.append(single_df)
     msd_df = pd.concat(msd_df, ignore_index=False, axis=1)
-    tau_df = pd.DataFrame(taus * 0.2, columns=['tau']) # time per frame = 0.4 s
+    tau_df = pd.DataFrame(taus * 0.2, columns=['tau'])  # time per frame = 0.4 s
     msd_df = pd.concat([tau_df, msd_df], ignore_index=False, axis=1)
     msd_df.to_csv('dataset_msd.csv', index=False)
     return
@@ -415,98 +421,75 @@ def analyse_msd(df):
     return
 
 
+def analyse_traces(df):
+    df = df.iloc[df['selected'] == 1]
+    total_linked, total_traces = 0, 0
+    for filenr in pd.unique(df['Filenr']):
+        df_file = df.iloc[df['Filenr'] == filenr]
+        total_traces += len(pd.unique(df_file['tracenr']))
+        counts = pd.value_counts(df_file['tracenr'])
+        total_linked += np.sum(counts > 1)
+
+    total_not_linked = total_traces - total_linked
+
+    print(fr"Average #traces: {total_traces / len(filenrs)}")
+    print(
+        fr"Average #linked traces: {total_linked / len(filenrs)} (fraction ={(total_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ")
+    print(
+        fr"Average #non-linked traces: {total_not_linked / len(filenrs)} (fraction ={(total_not_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ")
+    return
+
+
 if __name__ == "__main__":
     # 3) VARIABLES FOR
-    treshold        = 5
-    vmin            = 20
-    vmax            = 40
-    first_im        = 10
-    last_im         = 11
-    image_size_min  = 75
-    image_size_max  = 500
-    highpass        = 4
-    lowpass         = 1
+    treshold = 5
+    vmin = 20
+    vmax = 40
+    first_im = 10
+    last_im = 11
+    image_size_min = 75
+    image_size_max = 500
+    highpass = 4
+    lowpass = 1
 
-#Peak fitting
-    threshold_sd    = 5
-    spot_width      = 10
-    n_traces        = 20
-    selection_ar    = 10
-    selection_R2    = 0
-    selection_int   = 500
+    # Peak fitting
+    threshold_sd = 5
+    spot_width = 10
+    n_traces = 20
+    selection_ar = 10
+    selection_R2 = 0
+    selection_int = 500
 
-#link Traces
-    link_dist       = 5
-    gap_images      = 3
+    # link Traces
+    link_dist = 5
+    gap_images = 3
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
-    os.chdir(foldername)
-    files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+    df_filename = rf'{foldername}\dataset_pp.csv'
 
-    #read if dataset_pp exists, otherwise create it
-    if os.path.isfile(rf'{foldername}\dataset_pp.csv'):
-        dataset_pp = foldername + "\dataset_pp.csv"
-        df_pp = pd.read_csv(dataset_pp)
-        print(rf'Reading dataframe: {foldername}\dataset_pp.csv')
+    # read if dataset_pp exists, otherwise create it
+    if os.path.isfile(df_filename):
+        df = pd.read_csv(df_filename)
+        print(rf'Reading dataframe: {df_filename}')
     else:
-        averag_images(files,first_im,last_im)
-        analyse_images(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
-        dataset_pp = foldername + "\dataset_pp.csv"
-        df_pp = pd.read_csv(dataset_pp)
-        print(rf'Dataframe stored in {foldername}\dataset_pp.csv')
-    #read if dataset_pp_selection exists, otherwise create it
-    if os.path.isfile(rf'{foldername}\dataset_pp_selection.csv'):
-        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
-        df_pp = pd.read_csv(dataset_pp_selection)
-        print(rf'Reading dataframe: {foldername}\dataset_pp_selection.csv')
-    else:
-        peak_selection(df_pp, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min, image_size_max, vmin, vmax)
-        dataset_pp_selection = foldername + "\dataset_pp_selection.csv"
-        print(rf'Dataframe stored in {foldername}\dataset_pp_selection.csv')
-        df_pp=pd.read_csv(dataset_pp_selection)
+        os.chdir(foldername)
+        files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+        averag_images(files, first_im, last_im)
+        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width,
+                        n_traces, show=False)
+        df.to_csv(df_filename)
+        print(rf'Dataframe stored in {df_filename}')
 
+    df = select_peaks(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min,
+                      image_size_max, vmin, vmax)
+    df.to_csv(df_filename)
 
+    # plot_peaks(df, files, first_im, last_im, image_size_min, image_size_max, vmin, vmax)
 
+    df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=False)
+    df.to_csv(df_filename)
 
-    analyse_dataset(df_pp, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=True)
-    print(rf'Dataframe stored in {foldername}/dataset_final_loop.csv')
-
-
-
-
-
-
-
-    dataset_traces = foldername + "\dataset_final_loop.csv"
-    df_traces = pd.read_csv(dataset_traces)
-    # analyse_trajectories(df_traces)
-
-    dataset_link = foldername + "\dataset_linkpeaks.csv"
-    df_link = pd.read_csv(dataset_link)
-
-
-    def analyse_pp(df_pp, df_link, length, sort):
-        filenrs = np.sort(df_pp['Filenr'].value_counts().index.values)
-        total_linked, total_not_linked, total_traces = 0, 0, 0
-        for filenr in filenrs:
-            selected_traces = df_link[df_link['Filenr'] == filenr].loc[:, 'tracenr'].values
-            total_traces += len(selected_traces)
-            linked_trace, not_linked_trace = 0, 0
-            for peak in selected_traces:
-                selected_tracenr = df_link[df_link['tracenr'] == peak]
-                if len(selected_tracenr) > length:
-                    linked_trace += 1
-                else:
-                    not_linked_trace += 1
-            total_linked += linked_trace
-            total_not_linked += not_linked_trace
-        print(sort)
-        print(fr"Average of traces in a filenr: {total_traces / len(filenrs)}", '\n',
-              fr"Average of linked traces in a filenr: {total_linked / len(filenrs)} (fraction ={(total_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ",
-              '\n',
-              fr"Average of non linked traces in a filenr: {total_not_linked / len(filenrs)} (fraction ={(total_not_linked / len(filenrs)) / (total_traces / len(filenrs))}%) ")
-        return
-
+    analyse_traces(df)
 
     # analyse_pp(df_pp,df_link,1,'After linking peaks')
     # analyse_pp(df_pp,df_traces,3,'After linking traces')
@@ -518,10 +501,10 @@ if __name__ == "__main__":
     dataset_diffusie = foldername + "\dataset_diffusie.csv"
     df_diffusie = pd.read_csv(dataset_diffusie)
 
+
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'D (um^2 s^-1)', min=0, max=0.1, normal=False)
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, 'sigma (um)', min=0, max=0.25, normal=True)
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'v (um s^-1)', min=0, max=0.5, normal=False)
-
 
     # 6) FUNCTIONS FOR VALIDATIONS
     # 6.1) Histograms
@@ -547,7 +530,6 @@ if __name__ == "__main__":
     # Ef.show_histogram_values(df_diffusie, r'R2', xrange=[0,1.1], yrange=[0,100], binwidth=0.1,select=0.5)
 
     # 6.2) Plots
-
 
     # 6.3) Scatter plots
     # 6.3.1) Aspect ratio and intensity
