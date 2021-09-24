@@ -17,7 +17,6 @@ import warnings
 import TraceIO as tio
 from tqdm import tqdm
 import os.path
-from mkdir import mkdir
 
 
 # 1) FUNCTIONS FOR ANALYSE
@@ -130,27 +129,27 @@ def fit_peak(Z, show=False, center=[0, 0]):
     return fit, p_fitted, R2
 
 
-def find_peaks(image_array, spot_width, threshold_sd, n_traces):
-    max = np.max(image_array)
-    threshold = np.median(image_array) + threshold_sd * np.std(image_array)
+def find_peaks(bandpass_image, spot_width, threshold_sd, n_traces):
+    max = np.max(bandpass_image)
+    threshold = np.median(bandpass_image) + threshold_sd * np.std(bandpass_image)
     # print(f'Threshold = {threshold_sd} sd = {threshold:.1f}')
     trace_i = 0
     pos = []
     while max > threshold and trace_i < n_traces:
-        max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
-        max_index = check_roi(max_index, image_array, spot_width)
-        roi = get_roi(image_array, max_index, spot_width)
+        max_index = np.asarray(np.unravel_index(np.argmax(bandpass_image, axis=None), bandpass_image.shape))
+        max_index = check_roi(max_index, bandpass_image, spot_width)
+        roi = get_roi(bandpass_image, max_index, spot_width)
         fit, pars, R2 = fit_peak(roi, show=False)
         # if statement toevoegen
         if R2 <= 0.5:
-            image_array = set_roi(image_array, max_index, roi - roi)
+            bandpass_image = set_roi(bandpass_image, max_index, roi - roi)
         else:
-            image_array = set_roi(image_array, max_index, roi - fit)
+            bandpass_image = set_roi(bandpass_image, max_index, roi - fit)
         pars[:2] += max_index
-        max = np.max(image_array)
+        max = np.max(bandpass_image)
         trace_i += 1
         pos.append(pars)
-    return np.asarray(pos), image_array
+    return np.asarray(pos), bandpass_image
 
 
 # 1.2) Function dataset peak positions
@@ -264,7 +263,7 @@ def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vm
         plt.imshow(original_image, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/original images/Image{num + 1}.png')
         #plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, foldername, highpass, lowpass, vmin, vmax,spot_width, threshold_sd, n_traces, show)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, foldername=foldername, highpass=highpass, lowpass=lowpass, vmin=vmin, vmax=vmax,spot_width=spot_width, threshold_sd=threshold_sd, n_traces=n_traces, show=show)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/filtered images/Image{num + 1}.png')
         #plt.cla()
@@ -455,8 +454,8 @@ if __name__ == "__main__":
     link_dist = 5
     gap_images = 3
 
-    foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
-    df_filename = rf'{foldername}\dataset_pp.csv'
+    foldername = fr"/Volumes/Drive Sven/2FOTON/210325 - 25-03-21  - Transgenic/data_052"
+    df_filename = rf'{foldername}/dataset_pp.csv'
 
     # read if dataset_pp exists, otherwise create it
     if os.path.isfile(df_filename):
@@ -465,7 +464,7 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        #averag_images(files, first_im, last_im)
+        averag_images(files, first_im, last_im)
         df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
         df.to_csv(df_filename)
         print(rf'Dataframe stored in {df_filename}')
@@ -473,11 +472,11 @@ if __name__ == "__main__":
 
 
 
-    df = select_peaks(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min,
-                      image_size_max, vmin, vmax)
+    df = select_peaks(df, selection_ar, selection_R2, selection_int)
     df.to_csv(df_filename)
 
-    # plot_peaks(df, files, first_im, last_im, image_size_min, image_size_max, vmin, vmax)
+    plot_peaks(df, files, first_im, last_im, image_size_min, image_size_max, vmin, vmax)
+
 
     df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=False)
     df.to_csv(df_filename)
