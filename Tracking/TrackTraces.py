@@ -130,13 +130,13 @@ def fit_peak(Z, show=False, center=[0, 0]):
     return fit, p_fitted, R2
 
 
-def find_peaks(image_array, spot_width, treshold_sd, n_traces):
+def find_peaks(image_array, spot_width, threshold_sd, n_traces):
     max = np.max(image_array)
-    treshold = np.median(image_array) + treshold_sd * np.std(image_array)
-    # print(f'Treshold = {treshold_sd} sd = {treshold:.1f}')
+    threshold = np.median(image_array) + threshold_sd * np.std(image_array)
+    # print(f'Threshold = {threshold_sd} sd = {threshold:.1f}')
     trace_i = 0
     pos = []
-    while max > treshold and trace_i < n_traces:
+    while max > threshold and trace_i < n_traces:
         max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
         max_index = check_roi(max_index, image_array, spot_width)
         roi = get_roi(image_array, max_index, spot_width)
@@ -234,16 +234,14 @@ def msd_trajectory(df, tracenr, pixsize_um=0.112, frametime_s=0.4, show=False):
     return msd_df
 
 
-# 2) FUNCTIONS FOR ANALYSEo
+# 2) FUNCTIONS FOR ANALYSE
 # 2.1)Analyse image and images
-def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin, vmax, spot_width, threshold_sd,
-                  n_traces, show):
+def analyse_image(image, file_nr, filename, foldername, highpass, lowpass, vmin, vmax, spot_width, threshold_sd, n_traces, show=False):
     highpass_image = image - ndimage.gaussian_filter(image, highpass)
     bandpass_image = ndimage.gaussian_filter(highpass_image, lowpass)
     filtered_image = np.copy(bandpass_image)
-    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width=spot_width, treshold_sd=threshold_sd,
-                                               n_traces=n_traces)
-    peak_positions = [np.append([filefolder + fr"\{filename}", file_nr, -1], p) for p in peak_positions]
+    peak_positions, cleared_image = find_peaks(bandpass_image, spot_width=spot_width, threshold_sd=threshold_sd, n_traces=n_traces)
+    peak_positions = [np.append([foldername + fr"\{filename}", file_nr, -1], p) for p in peak_positions]
     if file_nr == 0:
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
@@ -256,8 +254,7 @@ def analyse_image(image, file_nr, filename, filefolder, highpass, lowpass, vmin,
     return pp_dataframe, filtered_image, cleared_image
 
 
-def find_peaks(files, first_im, last_im, filefolder, highpass, lowpass, vmin, vmax, threshold_sd, spot_width,
-               n_traces, show):
+def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show):
     empty_pp_df = []
     for num, file in enumerate(files[first_im:last_im]):
         image = np.asarray(
@@ -265,21 +262,15 @@ def find_peaks(files, first_im, last_im, filefolder, highpass, lowpass, vmin, vm
         original_image = image
         original_image -= np.median(original_image)
         plt.imshow(original_image, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
-                        save=foldername + fr'/original images/Image{num + 1}.png')
-        plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, filefolder=filefolder, highpass=highpass,
-                                                             lowpass=lowpass, vmin=vmin, vmax=vmax,
-                                                             spot_width=spot_width,
-                                                             threshold_sd=threshold_sd, n_traces=n_traces, show=show)
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/original images/Image{num + 1}.png')
+        #plt.cla()
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, foldername, highpass, lowpass, vmin, vmax,spot_width, threshold_sd, n_traces, show)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
-                        save=foldername + fr'/filtered images/Image{num + 1}.png')
-        plt.cla()
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/filtered images/Image{num + 1}.png')
+        #plt.cla()
         plt.imshow(cleared_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
-        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1,
-                        save=foldername + fr'/cleared images/Image{num + 1}.png')
-        plt.cla()
+        tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/cleared images/Image{num + 1}.png')
+        #plt.cla()
         # Ef.show_intensity_histogram_filename(image.flatten())
         # Ef.show_intensity_histogram_filename(filtered_image.flatten())
         # Ef.show_intensity_histogram_filename(filtered_image.flatten(),cleared_image.flatten())
@@ -442,7 +433,7 @@ def analyse_traces(df):
 
 if __name__ == "__main__":
     # 3) VARIABLES FOR
-    treshold = 5
+    threshold = 5
     vmin = 20
     vmax = 40
     first_im = 10
@@ -474,11 +465,13 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        averag_images(files, first_im, last_im)
-        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width,
-                        n_traces, show=False)
+        #averag_images(files, first_im, last_im)
+        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
         df.to_csv(df_filename)
         print(rf'Dataframe stored in {df_filename}')
+
+
+
 
     df = select_peaks(df, files, first_im, last_im, selection_ar, selection_R2, selection_int, image_size_min,
                       image_size_max, vmin, vmax)
