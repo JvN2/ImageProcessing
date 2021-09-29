@@ -256,7 +256,7 @@ def analyse_image(image, file_nr, filename, foldername, highpass, lowpass, vmin,
 
 def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False):
     empty_pp_df = []
-    for num, file in enumerate(files[first_im:last_im]):
+    for num, file in tqdm(enumerate(files[first_im:last_im])):
         image = np.asarray(
             tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
         original_image = image
@@ -280,7 +280,7 @@ def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vm
     return all_pp_df
 
 
-def averag_images(files, first_im, last_im):
+def average_images(files, first_im, last_im):
     for num, file in enumerate(files[first_im:last_im]):
         try:
             image += np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max,
@@ -301,11 +301,12 @@ def averag_images(files, first_im, last_im):
     return
 
 
-def select_peaks(df, selection_ar, selection_R2, selection_int):
+def select_peaks(df, selection_ar, selection_R2, selection_int, df_filename):
     selection = df['aspect_ratio'] < selection_ar
     selection *= df['R2'] > selection_R2
     selection *= df['intensity (a.u.)'] < selection_int
     df['selected'] = 1
+    df.to_csv(df_filename)
     return df
 
 
@@ -346,16 +347,17 @@ def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
     return filtered_image
 
 
-def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=False):
+def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, df_filename, show=False):
     image = filter_image(files[0], image_size_min=image_size_min, image_size_max=image_size_max, highpass=highpass,lowpass=lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
     df = link_peaks(df, image, len(sorted_tracelength), show=show)
     df = link_traces(df, image, gap_images=gap_images, link_dist=link_dist, show=show)
+    df.to_csv(df_filename)
     return df
 
 
 # 2.4)Analyse dataset traces
-def analyse_trajectories(df):
+def analyse_trajectories(df, pix_size, timelag):
     sorted_tracelength = df['tracenr'].value_counts().index.values
     for i in sorted_tracelength:
         if len(df.loc[df['tracenr'] == i]) < 2:
@@ -363,13 +365,13 @@ def analyse_trajectories(df):
     msd_df = []
     taus = np.arange(1, df['Filenr'].max() + 1)
     for i in tqdm(sorted_tracelength, desc='msd'):
-        single_df = msd_trajectory(df, i, pixsize_um=0.112)
+        single_df = msd_trajectory(df, i, pixsize_um=pix_size)
         msd_df.append(single_df)
     msd_df = pd.concat(msd_df, ignore_index=False, axis=1)
-    tau_df = pd.DataFrame(taus * 0.2, columns=['tau'])  # time per frame = 0.4 s
+    tau_df = pd.DataFrame(taus * timelag, columns=['tau'])  # time per frame = 0.4 s
     msd_df = pd.concat([tau_df, msd_df], ignore_index=False, axis=1)
     msd_df.to_csv('dataset_msd.csv', index=False)
-    return
+    return msd_df
 
 
 # 2.5) Analyse dataset mean squared displacement
@@ -405,11 +407,9 @@ def analyse_msd(df):
             pars = np.append(R2, pars)
             pars = np.append(tracenr, pars)
             pos.append(pars)
-    df_diffusie = pd.DataFrame(np.asarray(pos), columns=(
-        'tracenr', 'R2', 'trace_length', 'sigma (um)', r'D (um^2 s^-1)', 'v (um s^-1)', 'sigma_error (um)',
-        r'D_error (um^2 s^-1)', 'v_error (um s^-1)'))
+    df_diffusie = pd.DataFrame(np.asarray(pos), columns=('tracenr', 'R2', 'trace_length', 'sigma (um)', r'D (um^2 s^-1)', 'v (um s^-1)', 'sigma_error (um)',r'D_error (um^2 s^-1)', 'v_error (um s^-1)'))
     df_diffusie.to_csv('dataset_diffusie.csv', index=False)
-    return
+    return df_diffusie
 
 
 def analyse_traces_stats(df):
@@ -431,34 +431,55 @@ def analyse_traces_stats(df):
     return
 
 
+ def video_select(foldername, filename, width, height):
+    os.chdir(foldername + filename)
+    files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
+    img_array = []
+    for filename in files:
+        img = opencv.imread(filename)
+        height, width, layers = img.shape
+        size = (width, height)
+        img_array.append(img)
+    out = opencv.VideoWriter(fr'video_selection.avi', opencv.VideoWriter_fourcc(*'DIVX'), 1, size)
+    for i in range(len(img_array)):
+        out.write(img_array[i])
+    out.release()
+    return
+
+
+
+
 if __name__ == "__main__":
-    # 3) VARIABLES FOR
+
+    # DETECT PEAKS
     threshold = 5
     vmin = 20
     vmax = 40
     first_im = 10
-    last_im = 12
+    last_im = 20
     image_size_min = 75
     image_size_max = 500
     highpass = 4
     lowpass = 1
-
-    # Peak fitting
     threshold_sd = 5
-    spot_width = 10
+    spot_width = 5
     n_traces = 20
+
+    # PEAK SELECTION
     selection_ar = 10
     selection_R2 = 0
     selection_int = 500
 
-    # link Traces
-    link_dist = 5
-    gap_images = 3
+    # PEAK LINKING
+    link_dist = 10
+    gap_images = 1
+    pix_size = 0.112
+    timelag = 0.2
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     df_filename = rf'{foldername}\dataset_pp.csv'
 
-    # read if dataset_pp exists, otherwise create it
+    # DETECT PEAKS
     if os.path.isfile(df_filename):
         df = pd.read_csv(df_filename)
         print(rf'Reading dataframe: {df_filename}')
@@ -467,46 +488,47 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        averag_images(files, first_im, last_im)
+        average_images(files, first_im, last_im)
         df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
         df.to_csv(df_filename)
         print(rf'Dataframe stored in {df_filename}')
 
 
-    df = select_peaks(df, selection_ar, selection_R2, selection_int)
-    df.to_csv(df_filename) #you have to close the csv in excell, otherwise you'll get an error
-
+    # PEAK SELECTION AND PLOTTING
+    df = select_peaks(df, selection_ar, selection_R2, selection_int, df_filename)
     plot_peaks(df, files, first_im, last_im, image_size_min, image_size_max, vmin, vmax)
 
-    df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, show=False)
-    df.to_csv(df_filename)
 
+    #PEAK LINKING
+    df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, df_filename, show=False)
     analyse_traces_stats(df)
 
-    #analyse_pp(df_pp,df_link,1,'After linking peaks')
-    # analyse_pp(df_pp,df_traces,3,'After linking traces')
 
+    #MEAN SQUARED DISPLACEMENT CALCULATION
     df_filename_msd = rf'{foldername}\dataset_msd.csv'
-    # read if dataset_msd exists, otherwise create it
+    df_diffusie = rf'{foldername}\dataset_diffusie.csv'
+
     if os.path.isfile(df_filename_msd):
-        df = pd.read_csv(df_filename_msd)
-        print(rf'Reading dataframe: {df_filename_msd}')
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+        df = pd.read_csv(df_filename_msd)
+        df_diffusie = pd.read_csv(df_diffusie)
+        print(rf'Reading dataframe: {df_filename_msd}')
+        print(rf'Reading dataframe: {df_diffusie}')
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        df_msd = analyse_trajectories(df)
-        analyse_msd(df_msd)
+        df_msd = analyse_trajectories(df, pix_size, timelag)
+        df_msd = analyse_msd(df_msd)
         print(rf'Dataframe stored in {df_filename_msd}')
 
 
 
+    video_select(foldername, df_filename, 10, 10)
 
 
 
-    dataset_diffusie = foldername + "\dataset_diffusie.csv"
-    df_diffusie = pd.read_csv(dataset_diffusie)
+
 
 
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'D (um^2 s^-1)', min=0, max=0.1, normal=False)
@@ -545,20 +567,6 @@ if __name__ == "__main__":
     # Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','velocity (um s^-1)','diffusion_error (um^2 s^-2)','velocity_error (um s^-1)', error=True)
     # Ef.show_scatterplot(df_diffusie,r'sigma (um)', 'velocity (um s^-1)','sigma_error (um)','velocity_error (um s^-1)', error=True)
 
-    # 6.3) Follow trajectories
-    def video_select(filename):
-        os.chdir(foldername + filename)
-        files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
-        img_array = []
-        for filename in files:
-            img = opencv.imread(filename)
-            height, width, layers = img.shape
-            size = (width, height)
-            img_array.append(img)
-        out = opencv.VideoWriter(fr'video_selection.avi', opencv.VideoWriter_fourcc(*'DIVX'), 1, size)
-        for i in range(len(img_array)):
-            out.write(img_array[i])
-        out.release()
 
 
     # video_select(fr"\selection_peaks")
