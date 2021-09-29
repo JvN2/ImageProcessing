@@ -134,7 +134,7 @@ def h5_write_par(filename, label, name, value, error=0, type='local'):
         print(f'@h5_write_par: Label does not exist: {label}')
         return
 
-    if type is not 'fit':
+    if type != 'fit':
         error = np.nan
     items = ['values', 'errors', 'types']
     vars = [value, error, ['fit', 'local', 'global'].index(type)]
@@ -399,9 +399,7 @@ def key_press_action(event):
     return
 
 
-def format_plot(xtitle='x (a.u.)', ytitle='y (a.u.)', title='', xrange=None, yrange=None,
-                ylog=False, xlog=False, scale_page=1.0, aspect=0.5, save=None, boxed=True,
-                GUI=False, ref='', legend=None, fig=None, ax=None, txt=None):
+def format_plot(xtitle='x (a.u.)', ytitle='y (a.u.)', title='title', xrange=None, yrange=None,ylog=False, xlog=False, scale_page=1.0, aspect=0.5, save=None, boxed=True,GUI=False, ref='', legend=None, fig=None, ax=None, txt=None):
     # adjust the format to nice looks
     from matplotlib.ticker import AutoMinorLocator
     import os, subprocess
@@ -499,7 +497,7 @@ def format_plot(xtitle='x (a.u.)', ytitle='y (a.u.)', title='', xrange=None, yra
 
     if save is not None:
         if not os.path.exists(os.path.dirname(save)):
-            os.makedirs(os.path.dirname(save))
+            os.mkdir(os.path.dirname(save))
         base, ext = os.path.splitext(save)
         if ext == '.emf':
             save = base + '.pdf'
