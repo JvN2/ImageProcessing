@@ -431,22 +431,6 @@ def analyse_traces_stats(df):
     return
 
 
- def video_select(foldername, filename, width, height):
-    os.chdir(foldername + filename)
-    files = natsorted(glob.glob("*.jpg"), alg=ns.IGNORECASE)
-    img_array = []
-    for filename in files:
-        img = opencv.imread(filename)
-        height, width, layers = img.shape
-        size = (width, height)
-        img_array.append(img)
-    out = opencv.VideoWriter(fr'video_selection.avi', opencv.VideoWriter_fourcc(*'DIVX'), 1, size)
-    for i in range(len(img_array)):
-        out.write(img_array[i])
-    out.release()
-    return
-
-
 
 
 if __name__ == "__main__":
@@ -524,12 +508,15 @@ if __name__ == "__main__":
 
 
 
-    video_select(foldername, df_filename, 10, 10)
 
 
 
 
 
+
+
+    #video_traces(files, df_diffusie['tracenr'].value_counts().index.values, df_traces)
+    #select_video(foldername, df_filename, 10, 10)
 
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, r'D (um^2 s^-1)', min=0, max=0.1, normal=False)
     # Ef.plot_peaks_colors(df_traces, df_diffusie, files, 'sigma (um)', min=0, max=0.25, normal=True)
@@ -567,9 +554,23 @@ if __name__ == "__main__":
     # Ef.show_scatterplot(df_diffusie,r'diffusion (um^2 s^-2)','velocity (um s^-1)','diffusion_error (um^2 s^-2)','velocity_error (um s^-1)', error=True)
     # Ef.show_scatterplot(df_diffusie,r'sigma (um)', 'velocity (um s^-1)','sigma_error (um)','velocity_error (um s^-1)', error=True)
 
+    def select_video(foldername,filename,width,height):
+        os.chdir(foldername + filename)
+        files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
+        img_array = []
+        height, width, layers = img.shape
+        size = (width, height)
+        for filename in files:
+            img = opencv.imread(filename)
+
+            img_array.append(img)
+        out = opencv.VideoWriter(fr'video_selection.avi', opencv.VideoWriter_fourcc(*'DIVX'), 1, size)
+        for i in range(len(img_array)):
+            out.write(img_array[i])
+        out.release()
+        return
 
 
-    # video_select(fr"\selection_peaks")
     def video_traces(files, traces, df):
         for trace in tqdm(traces, desc='plot trajectory'):
             print(trace)
@@ -587,5 +588,3 @@ if __name__ == "__main__":
             for i in range(len(img_array)):
                 out.write(img_array[i])
             out.release()
-
-    # video_traces(files, df_diffusie['tracenr'].value_counts().index.values, df_traces)
