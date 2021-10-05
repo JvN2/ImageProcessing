@@ -355,10 +355,10 @@ def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, ma
 
 
 # 2.4)Analyse dataset traces
-def analyse_trajectories(df, pix_size, timelag):
+def analyse_trajectories(df, pix_size, timelag, min_trace_len):
     sorted_tracelength = df['tracenr'].value_counts().index.values
     for i in sorted_tracelength:
-        if len(df.loc[df['tracenr'] == i]) < 2:
+        if len(df.loc[df['tracenr'] == i]) < min_trace_len:
             sorted_tracelength = np.delete(np.asarray(sorted_tracelength), np.where(sorted_tracelength == i)[0])
     msd_df = []
     taus = np.arange(1, df['Filenr'].max() + 1)
@@ -457,6 +457,7 @@ if __name__ == "__main__":
     gap_images = 1
     pix_size = 0.112 #um per pixel
     timelag = 0.2
+    min_trace_len = 2
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     df_filename = rf'{foldername}\dataset_pp.csv'
@@ -500,7 +501,7 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        df_msd = analyse_trajectories(df, pix_size, timelag)
+        df_msd = analyse_trajectories(df, pix_size, timelag, min_trace_len)
         df_msd = analyse_msd(df_msd)
         print(rf'Dataframe stored in {df_filename_msd}')
 
