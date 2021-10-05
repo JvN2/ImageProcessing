@@ -124,8 +124,7 @@ def fit_peak(Z, show=False, center=[0, 0]):
         ax.set_zlim(-20, 90)
         plt.colorbar(surf, shrink=0.5, aspect=7)
         plt.title("residu peak", fontsize=20)
-        plt.show()
-        plt.close()
+        plt.draw()
     return fit, p_fitted, R2
 
 
@@ -153,7 +152,7 @@ def peaks_finder(bandpass_image, spot_width, threshold_sd, n_traces):
 
 
 # 1.2) Function dataset peak positions
-def link_peaks(df, image, n_image, max_dist=5, show=False):
+def link_peaks(df, image, n_image, max_dist, show=False):
     pp_df = df.copy()
     for j in range(int(n_image) - 1):
         result1 = pp_df.loc[pp_df['Filenr'] == j]
@@ -171,8 +170,7 @@ def link_peaks(df, image, n_image, max_dist=5, show=False):
             pp_df.loc[int(no_trace[no_peak_num]), 'tracenr'] = new_trace_nr + no_peak_num
     if show:
         Ef.plot_link_traces(image, pp_df)
-
-    #pp_df.to_csv('dataset_linkpeaks.csv', index=False)
+        plt.draw()
     return pp_df
 
 
@@ -203,7 +201,7 @@ def link_traces(df, image, gap_images, link_dist, show):
 
 
 # 1.3) Functions dataset traces
-def msd_trajectory(df, tracenr, pixsize_um=0.112, frametime_s=0.4, show=False):
+def msd_trajectory(df, tracenr, pixsize_um, frametime_s, show=False):
     positions = df[df['tracenr'] == tracenr].loc[:, ['x (pix)', 'y (pix)']].values * pixsize_um
     filenrs = df[df['tracenr'] == tracenr].loc[:, ['Filenr']].values
     tau_max = int(np.max(filenrs) - np.min(filenrs))
@@ -280,7 +278,7 @@ def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vm
     return all_pp_df
 
 
-def average_images(files, first_im, last_im):
+def average_images(files, first_im, last_im, vmin, vmax):
     for num, file in enumerate(files[first_im:last_im]):
         try:
             image += np.asarray(tiff.imread(file).astype(float))[image_size_min:image_size_max,
@@ -347,10 +345,10 @@ def filter_image(file, image_size_min, image_size_max, highpass, lowpass):
     return filtered_image
 
 
-def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, df_filename, show=False):
+def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, max_dist, link_dist, gap_images, df_filename, show=False):
     image = filter_image(files[0], image_size_min=image_size_min, image_size_max=image_size_max, highpass=highpass,lowpass=lowpass)
     sorted_tracelength = df['Filenr'].value_counts().index.values
-    df = link_peaks(df, image, len(sorted_tracelength), show=show)
+    df = link_peaks(df, image, len(sorted_tracelength), max_dist=max_dist, show=show)
     df = link_traces(df, image, gap_images=gap_images, link_dist=link_dist, show=show)
     df.to_csv(df_filename)
     return df
@@ -436,9 +434,8 @@ def analyse_traces_stats(df):
 if __name__ == "__main__":
 
     # DETECT PEAKS
-    threshold = 5
-    vmin = 20
-    vmax = 40
+    vmin = 70
+    vmax = 140
     first_im = 10
     last_im = 20
     image_size_min = 75
@@ -446,8 +443,8 @@ if __name__ == "__main__":
     highpass = 4
     lowpass = 1
     threshold_sd = 5
-    spot_width = 5
-    n_traces = 20
+    spot_width = 5 #in pix
+    max_n_peaks = 50
 
     # PEAK SELECTION
     selection_ar = 10
@@ -455,9 +452,10 @@ if __name__ == "__main__":
     selection_int = 500
 
     # PEAK LINKING
-    link_dist = 10
+    peak_link_dist = 5
+    gap_link_dist = 10 #in px
     gap_images = 1
-    pix_size = 0.112
+    pix_size = 0.112 #um per pixel
     timelag = 0.2
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
@@ -472,8 +470,8 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        average_images(files, first_im, last_im)
-        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False)
+        average_images(files, first_im, last_im, vmin, vmax)
+        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, max_n_peaks, show=False)
         df.to_csv(df_filename)
         print(rf'Dataframe stored in {df_filename}')
 
@@ -484,7 +482,7 @@ if __name__ == "__main__":
 
 
     #PEAK LINKING
-    df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, link_dist, gap_images, df_filename, show=False)
+    df = find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, peak_link_dist, gap_link_dist, gap_images, df_filename, show=False)
     analyse_traces_stats(df)
 
 

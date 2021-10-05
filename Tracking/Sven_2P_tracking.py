@@ -12,8 +12,8 @@ if __name__ == "__main__":
 
     # DETECT PEAKS
     threshold = 5
-    vmin = 20
-    vmax = 40
+    vmin = 10
+    vmax = 20
     first_im = 10
     last_im = 20
     image_size_min = 75

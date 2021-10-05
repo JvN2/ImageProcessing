@@ -78,7 +78,7 @@ def plot_link_traces(image, pp_df):
                 plt.plot(trace[1], trace[0], color='orange')
                 plt.plot(trace[1][0], trace[0][0], marker="o", markerfacecolor="none", color="orange")
                 plt.text(trace[1][0], trace[0][0], str(i), color="orange")
-    tio.format_plot(xtitle = 'x (a.u.)', ytitle = r'y (pix)', title = 'Filtered image with traces', xrange = None, yrange = None, ylog = False, xlog = False, scale_page = 0.5, aspect = 1.0, save = None, boxed = True, GUI = False, ref = '', legend = None, fig = None, ax = None, txt = None) #r'x (pix)', r'y (pix)', title='Filtered image with traces', aspect=1.0, scale_page=0.5,save=fr'filtered image with traces.png'
+    tio.format_plot(xtitle = 'x (pix)', ytitle = r'y (pix)', title = 'Filtered image with traces', xrange = None, yrange = None, ylog = False, xlog = False, scale_page = 0.5, aspect = 1.0, save = None, boxed = True, GUI = False, ref = '', legend = None, fig = None, ax = None, txt = None) #r'x (pix)', r'y (pix)', title='Filtered image with traces', aspect=1.0, scale_page=0.5,save=fr'filtered image with traces.png'
 
     plt.cla()
     return
