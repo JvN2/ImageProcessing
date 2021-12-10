@@ -244,7 +244,7 @@ def analyse_image(image, file_nr, filename, foldername, highpass, lowpass, vmin,
         for i, _ in enumerate(peak_positions):
             peak_positions[i][2] = i
     if show:
-        Ef.plot_find_peaks(peak_positions, filtered_image, file_nr, vmin=vmax, vmax=vmin, show=True)
+        Ef.plot_find_peaks(peak_positions, filtered_image, file_nr, vmin=vmin, vmax=vmax, show=True)
     pp_dataframe = pd.DataFrame(peak_positions, columns=(
         'Filename', 'Filenr', 'tracenr', 'x (pix)', 'y (pix)', 'sigma (pix)', 'aspect_ratio', 'theta',
         'intensity (a.u.)', 'R2', 'error x (pix)', 'error y (pix)', 'error sigma (pix)', 'error aspect_ratio',
@@ -255,14 +255,12 @@ def analyse_image(image, file_nr, filename, foldername, highpass, lowpass, vmin,
 def find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, n_traces, show=False):
     empty_pp_df = []
     for num, file in tqdm(enumerate(files[first_im:last_im])):
-        image = np.asarray(
-            tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
+        image = np.asarray(tiff.imread(file).astype(float)[image_size_min:image_size_max, image_size_min:image_size_max])
         original_image = image
         original_image -= np.median(original_image)
         plt.imshow(original_image, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/original images/Image{num + 1}.png')
-        #plt.cla()
-        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, foldername=foldername, highpass=highpass, lowpass=lowpass, vmin=vmin, vmax=vmax,spot_width=spot_width, threshold_sd=threshold_sd, n_traces=n_traces, show=show)
+        pp_df, filtered_image, cleared_image = analyse_image(image, num, file, foldername=foldername, highpass=highpass,lowpass=lowpass, vmin=vmin, vmax=vmax,spot_width=spot_width,threshold_sd=threshold_sd, n_traces=n_traces, show=show)
         plt.imshow(filtered_image, vmin=vmin, vmax=vmax, origin="lower", cmap='gray')
         tio.format_plot(r'x (pix)', r'y (pix)', aspect=1.0, scale_page=1, save=foldername + fr'/filtered images/Image{num + 1}.png')
         plt.cla()
@@ -355,15 +353,15 @@ def find_traces(df, files, image_size_min, image_size_max, highpass, lowpass, ma
 
 
 # 2.4)Analyse dataset traces
-def analyse_trajectories(df, pix_size, timelag):
+def analyse_trajectories(df, pix_size, timelag, min_trace_len, frametime_s):
     sorted_tracelength = df['tracenr'].value_counts().index.values
     for i in sorted_tracelength:
-        if len(df.loc[df['tracenr'] == i]) < 2:
+        if len(df.loc[df['tracenr'] == i]) < min_trace_len:
             sorted_tracelength = np.delete(np.asarray(sorted_tracelength), np.where(sorted_tracelength == i)[0])
     msd_df = []
     taus = np.arange(1, df['Filenr'].max() + 1)
     for i in tqdm(sorted_tracelength, desc='msd'):
-        single_df = msd_trajectory(df, i, pixsize_um=pix_size)
+        single_df = msd_trajectory(df, i, pixsize_um=pix_size, frametime_s = frametime_s)
         msd_df.append(single_df)
     msd_df = pd.concat(msd_df, ignore_index=False, axis=1)
     tau_df = pd.DataFrame(taus * timelag, columns=['tau'])  # time per frame = 0.4 s
@@ -435,7 +433,7 @@ if __name__ == "__main__":
 
     # DETECT PEAKS
     vmin = 70
-    vmax = 140
+    vmax = 120
     first_im = 10
     last_im = 20
     image_size_min = 75
@@ -443,12 +441,12 @@ if __name__ == "__main__":
     highpass = 4
     lowpass = 1
     threshold_sd = 5
-    spot_width = 5 #in pix
+    spot_width = 5
     max_n_peaks = 50
 
     # PEAK SELECTION
-    selection_ar = 10
-    selection_R2 = 0
+    selection_ar = 1.5
+    selection_R2 = 0.75
     selection_int = 500
 
     # PEAK LINKING
@@ -457,6 +455,7 @@ if __name__ == "__main__":
     gap_images = 1
     pix_size = 0.112 #um per pixel
     timelag = 0.2
+    min_trace_len = 2
 
     foldername = fr"F:\2FOTON\210325 - 25-03-21  - Transgenic\data_052"
     df_filename = rf'{foldername}\dataset_pp.csv'
@@ -471,7 +470,7 @@ if __name__ == "__main__":
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
         average_images(files, first_im, last_im, vmin, vmax)
-        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, max_n_peaks, show=False)
+        df = find_peaks(files, first_im, last_im, foldername, highpass, lowpass, vmin, vmax, threshold_sd, spot_width, max_n_peaks, show=True)
         df.to_csv(df_filename)
         print(rf'Dataframe stored in {df_filename}')
 
@@ -500,14 +499,9 @@ if __name__ == "__main__":
     else:
         os.chdir(foldername)
         files = natsorted(glob.glob("*.tiff"), alg=ns.IGNORECASE)
-        df_msd = analyse_trajectories(df, pix_size, timelag)
+        df_msd = analyse_trajectories(df, pix_size, timelag, min_trace_len, frametime_s=timelag)
         df_msd = analyse_msd(df_msd)
         print(rf'Dataframe stored in {df_filename_msd}')
-
-
-
-
-
 
 
 

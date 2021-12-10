@@ -1,16 +1,17 @@
 from datetime import timedelta, datetime
 from pathlib import Path
-
+from pystackreg import StackReg
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.fftpack as sfft
+import skvideo.io as sk
 import tqdm
 from PIL import Image, ImageDraw, ImageFont
 
-font = ImageFont.truetype('arial', 25)
-
+#font = ImageFont.truetype('arial', 25)
+font = ImageFont.load_default()
 
 def read_dat(filenames):
     if isinstance(filenames, str):
@@ -21,7 +22,7 @@ def read_dat(filenames):
         if '.dat' not in filename:
             filename = filename.split('.')[0] + '.dat'
         new_df = pd.read_csv(filename, delimiter='\t')
-        new_df['Filenr'] = [rf'{Path(filename).parent}\Image{int(i)}.tiff' for i in new_df['Filenr']]
+        new_df['Filenr'] = [rf'{Path(filename).parent}/image{int(i)}.tiff' for i in new_df['Filenr']]
         new_df.rename(columns={'Filenr': 'Filename'}, inplace=True)
 
         try:
@@ -48,7 +49,7 @@ def read_dat(filenames):
 def read_log(filename):
     filename = Path(filename)
     if filename.suffix == '.tiff':
-        filename = Path(f'{filename.parent}\\{filename.parent.stem}').with_suffix('.log')
+        filename = Path(f'{filename.parent}//{filename.parent.stem}').with_suffix('.log')
     else:
         filename = filename.with_suffix('.log')
 
@@ -146,7 +147,7 @@ def scale_u8(array, z_range=None):
     return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
 
 
-def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
+def stacks_to_movie(filename, df, tile, drift_correction=None, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
     ims = []
     df = select_frames(df, tile=tile)
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
@@ -174,17 +175,24 @@ def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_r
         add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
         ims.append(im)
 
+        if drift_correction is 1:
+            sr = StackReg(StackReg.RIGID_BODY)
+            # register each frame to the previous (already registered) one
+            ims = sr.register_transform_stack(ims, reference='previous')
+        else:
+            print('No drift correction')
+
         ext = filename[-3:]
         if ext == 'gif':
             ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
         elif ext in ['avi', 'mp4']:
             height, width, layers = np.asarray(ims[0]).shape
-            size = (width, height)
+            size = (height, width)
             if ext == 'avi':
                 codec = 'DIVX'
             elif ext == 'mp4':
                 codec = 'mp4v'
-            out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
+            out = skvideo.io.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
             for im in ims:
                 out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
             out.release()
@@ -383,13 +391,13 @@ def get_drift(df, tile, vmax=None):
         plt.show()
 
 if __name__ == "__main__":
-    dir = Path(r'D:\Data\Noort\2photon\210917 time_lapse pollen dr5v2')
-    df_file = rf'{dir.parent}\dataframe.csv'
+    dir = Path(r'/Volumes/Drive Sven/2FOTON/211001')
+    df_file = rf'{dir.parent}/dataframe.csv'
 
     refresh_df_file = True
     if refresh_df_file:
-        # assembe dataframe from multiple folders/files
-        filenames = [str(f) for f in dir.glob('data_0*\data_*.dat')]
+        # assemble dataframe from multiple folders/files
+        filenames = [str(f) for f in dir.glob('data_0*/data_*.dat')]
 
         print(f'{len(filenames)} folders found.')
         df = read_dat(filenames)
@@ -424,8 +432,8 @@ if __name__ == "__main__":
         foldername = Path(df_file).parent
         for tile in list(set(df['Tile'].astype(int))):
         # for tile in [34]:
-            stacks_to_movie(rf'{foldername}\Tile_{tile}_transmission.mp4', df, tile)
-            stacks_to_movie(rf'{foldername}\Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
+            stacks_to_movie(rf'{foldername}/Tile_{tile}_transmission.mp4', df, tile, drift_correction=1)
+            stacks_to_movie(rf'{foldername}/Tile_{tile}_fluorescence.mp4', df, tile, drift_correction=1, merge_transmission=False)
 
     if 0:
         # stitch mosaic
