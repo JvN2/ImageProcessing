@@ -6,9 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.fftpack as sfft
-import skvideo.io as sk
+from skimage import io
 import tqdm
 from PIL import Image, ImageDraw, ImageFont
+import tifffile
 
 #font = ImageFont.truetype('arial', 25)
 font = ImageFont.load_default()
@@ -147,7 +148,7 @@ def scale_u8(array, z_range=None):
     return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
 
 
-def stacks_to_movie(filename, df, tile, drift_correction=None, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
+def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
     ims = []
     df = select_frames(df, tile=tile)
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
@@ -175,13 +176,6 @@ def stacks_to_movie(filename, df, tile, drift_correction=None, max_intensity_ran
         add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
         ims.append(im)
 
-        if drift_correction is 1:
-            sr = StackReg(StackReg.RIGID_BODY)
-            # register each frame to the previous (already registered) one
-            ims = sr.register_transform_stack(ims, reference='previous')
-        else:
-            print('No drift correction')
-
         ext = filename[-3:]
         if ext == 'gif':
             ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
@@ -192,7 +186,7 @@ def stacks_to_movie(filename, df, tile, drift_correction=None, max_intensity_ran
                 codec = 'DIVX'
             elif ext == 'mp4':
                 codec = 'mp4v'
-            out = skvideo.io.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
+            out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
             for im in ims:
                 out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
             out.release()
@@ -201,6 +195,66 @@ def stacks_to_movie(filename, df, tile, drift_correction=None, max_intensity_ran
 
     return filename
 
+
+def stacks_to_3D(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5,merge_transmission=1):
+    ims = []
+    df = select_frames(df, tile=tile)
+    for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
+        df_stack = select_frames(df, tile=tile, frame=frame)
+        max_intensity = get_max_intensity_image(df_stack)
+        # max_intensity = get_brightest_slice(df)
+        transmission = read_image(df_stack.iloc[0]['Filename'])
+
+        if max_intensity_range is None:
+            max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
+            # print(f'max_intensity_range = {max_intensity_range}')
+        # if transmission_range is None:
+        transmission_range = [0.3 * np.percentile(transmission, 2), 1.5 * np.percentile(transmission, 95)]
+        # print(f'transmission_range = {transmission_range}')
+
+        transmission = scale_u8(transmission, transmission_range)
+        max_intensity = scale_u8(max_intensity, max_intensity_range)
+
+        im = merge_rgb_images(merge_transmission * transmission, red=max_intensity)
+
+        add_scale_bar(im, 0.054)
+        add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
+        ims.append(im)
+
+        ext = filename[-3:]
+        if ext == 'gif':
+            ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
+        elif ext == 'tif':
+            tifffile.imsave(filename,im)
+        elif ext in ['avi', 'mp4']:
+            height, width, layers = np.asarray(ims[0]).shape
+            size = (height, width)
+            if ext == 'avi':
+                codec = 'DIVX'
+            elif ext == 'mp4':
+                codec = 'mp4v'
+            out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
+            for im in ims:
+                out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
+            out.release()
+        else:
+            print('Filetype not supported.')
+
+    return filename
+
+def stackreg(Filename, drift_correction=False):
+
+    img0 = io.imread(Path(df['Filename'].iloc[0]))
+
+    if drift_correction is False:
+        sr = StackReg(StackReg.RIGID_BODY)
+        out_previous = sr.register_transform_stack(img0, reference='previous')
+        ims[0].save(out_previous, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
+    else:
+        pass
+
+
+    return
 
 def replace_roi(image, roi, center, max_intensity=True):
     x = ll = 0
@@ -391,7 +445,7 @@ def get_drift(df, tile, vmax=None):
         plt.show()
 
 if __name__ == "__main__":
-    dir = Path(r'/Volumes/Drive Sven/2FOTON/211001')
+    dir = Path(r'/Volumes/DRIVE SVEN2/2PHOTON/211022/211023')
     df_file = rf'{dir.parent}/dataframe.csv'
 
     refresh_df_file = True
@@ -432,8 +486,17 @@ if __name__ == "__main__":
         foldername = Path(df_file).parent
         for tile in list(set(df['Tile'].astype(int))):
         # for tile in [34]:
-            stacks_to_movie(rf'{foldername}/Tile_{tile}_transmission.mp4', df, tile, drift_correction=1)
-            stacks_to_movie(rf'{foldername}/Tile_{tile}_fluorescence.mp4', df, tile, drift_correction=1, merge_transmission=False)
+            stacks_to_movie(rf'{foldername}/Tile_{tile}_transmission.mp4', df, tile)
+            stacks_to_movie(rf'{foldername}/Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
+
+    if 0:
+        # create 3D object
+        foldername = Path(df['Filename'].iloc[0]).parent.parent
+        foldername = Path(df_file).parent
+        for tile in list(set(df['Tile'].astype(int))):
+            # for tile in [34]:
+            filename = stacks_to_3D(rf'{foldername}/Tile_{tile}_fluorescence.tif', df, tile, merge_transmission=False)
+            stackreg(filename, drift_correction=True)
 
     if 0:
         # stitch mosaic
