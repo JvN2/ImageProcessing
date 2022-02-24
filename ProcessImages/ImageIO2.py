@@ -1,18 +1,16 @@
 from datetime import timedelta, datetime
 from pathlib import Path
-from pystackreg import StackReg
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.fftpack as sfft
-from skimage import io
 import tqdm
 from PIL import Image, ImageDraw, ImageFont
-import tifffile
 
-#font = ImageFont.truetype('arial', 25)
-font = ImageFont.load_default()
+font = ImageFont.truetype('arial', 25)
+
 
 def read_dat(filenames):
     if isinstance(filenames, str):
@@ -23,7 +21,7 @@ def read_dat(filenames):
         if '.dat' not in filename:
             filename = filename.split('.')[0] + '.dat'
         new_df = pd.read_csv(filename, delimiter='\t')
-        new_df['Filenr'] = [rf'{Path(filename).parent}/image{int(i)}.tiff' for i in new_df['Filenr']]
+        new_df['Filenr'] = [rf'{Path(filename).parent}\Image{int(i)}.tiff' for i in new_df['Filenr']]
         new_df.rename(columns={'Filenr': 'Filename'}, inplace=True)
 
         try:
@@ -50,7 +48,7 @@ def read_dat(filenames):
 def read_log(filename):
     filename = Path(filename)
     if filename.suffix == '.tiff':
-        filename = Path(f'{filename.parent}//{filename.parent.stem}').with_suffix('.log')
+        filename = Path(f'{filename.parent}\\{filename.parent.stem}').with_suffix('.log')
     else:
         filename = filename.with_suffix('.log')
 
@@ -148,26 +146,28 @@ def scale_u8(array, z_range=None):
     return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
 
 
-def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):
+def stacks_to_movie(filename, df, tile, intensity_range=None, transmission_range=None, fps=5, merge_transmission=1,
+                    autoscale=False):
     ims = []
     df = select_frames(df, tile=tile)
+    intensity = []
     for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
         df_stack = select_frames(df, tile=tile, frame=frame)
-        max_intensity = get_max_intensity_image(df_stack)
-        #max_intensity = get_brightest_slice(df)
-        transmission = read_image(df_stack.iloc[0]['Filename'])
+        time = df_stack['Time (s)'].mean() / 3600
+        max_intensity_image, total_intensity = get_max_intensity_image(df_stack)
+        intensity.append([time, total_intensity])
+        # max_intensity = get_brightest_slice(df_stack)
+        # max_intensity = get_autoscale(df_stack)
+        transmission_image = read_image(df_stack.iloc[0]['Filename'])
 
-        if max_intensity_range is None:
-            max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
-            # print(f'max_intensity_range = {max_intensity_range}')
-        # if transmission_range is None:
-        transmission_range = [0.3 * np.percentile(transmission, 2), 1.5*np.percentile(transmission, 95)]
-            # print(f'transmission_range = {transmission_range}')
+        if intensity_range is None or autoscale:
+            intensity_range = [np.percentile(max_intensity_image, 2), 6 * np.percentile(max_intensity_image, 99.9)]
 
-        transmission = scale_u8(transmission, transmission_range)
-        max_intensity = scale_u8(max_intensity, max_intensity_range)
+        transmission_range = [0.3 * np.percentile(transmission_image, 2), 2 * np.percentile(transmission_image, 95)]
+        transmission_image = scale_u8(transmission_image, transmission_range)
+        max_intensity_image = scale_u8(max_intensity_image, intensity_range)
 
-        im = merge_rgb_images(merge_transmission * transmission, red=max_intensity)
+        im = merge_rgb_images(merge_transmission * transmission_image, green=max_intensity_image)
 
         # add_text(im, f"Wavelength = {df_stack.iloc[0]['Wavelength (nm)']:.0f} nm")
         # text = df_stack.iloc[0]['Filename']
@@ -181,7 +181,7 @@ def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_r
             ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
         elif ext in ['avi', 'mp4']:
             height, width, layers = np.asarray(ims[0]).shape
-            size = (height, width)
+            size = (width, height)
             if ext == 'avi':
                 codec = 'DIVX'
             elif ext == 'mp4':
@@ -193,68 +193,8 @@ def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_r
         else:
             print('Filetype {ext} not supported.')
 
-    return filename
+    return np.asarray(intensity).T
 
-
-def stacks_to_3D(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5,merge_transmission=1):
-    ims = []
-    df = select_frames(df, tile=tile)
-    for frame in tqdm.tqdm(df['Frame'].unique(), desc=filename):
-        df_stack = select_frames(df, tile=tile, frame=frame)
-        max_intensity = get_max_intensity_image(df_stack)
-        # max_intensity = get_brightest_slice(df)
-        transmission = read_image(df_stack.iloc[0]['Filename'])
-
-        if max_intensity_range is None:
-            max_intensity_range = [np.percentile(max_intensity, 2), 2 * np.percentile(max_intensity, 99)]
-            # print(f'max_intensity_range = {max_intensity_range}')
-        # if transmission_range is None:
-        transmission_range = [0.3 * np.percentile(transmission, 2), 1.5 * np.percentile(transmission, 95)]
-        # print(f'transmission_range = {transmission_range}')
-
-        transmission = scale_u8(transmission, transmission_range)
-        max_intensity = scale_u8(max_intensity, max_intensity_range)
-
-        im = merge_rgb_images(merge_transmission * transmission, red=max_intensity)
-
-        add_scale_bar(im, 0.054)
-        add_time_bar(im, df_stack.iloc[0]['Time (s)'], df['Time (s)'].max(), progress_text='t')
-        ims.append(im)
-
-        ext = filename[-3:]
-        if ext == 'gif':
-            ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
-        elif ext == 'tif':
-            tifffile.imsave(filename,im)
-        elif ext in ['avi', 'mp4']:
-            height, width, layers = np.asarray(ims[0]).shape
-            size = (height, width)
-            if ext == 'avi':
-                codec = 'DIVX'
-            elif ext == 'mp4':
-                codec = 'mp4v'
-            out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
-            for im in ims:
-                out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
-            out.release()
-        else:
-            print('Filetype not supported.')
-
-    return filename
-
-def stackreg(Filename, drift_correction=False):
-
-    img0 = io.imread(Path(df['Filename'].iloc[0]))
-
-    if drift_correction is False:
-        sr = StackReg(StackReg.RIGID_BODY)
-        out_previous = sr.register_transform_stack(img0, reference='previous')
-        ims[0].save(out_previous, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
-    else:
-        pass
-
-
-    return
 
 def replace_roi(image, roi, center, max_intensity=True):
     x = ll = 0
@@ -366,16 +306,40 @@ def get_brightest_slice(df):
 def get_max_intensity_image(df):
     settings = read_log(df.iloc[0]['Filename'])
     if settings["LED (V)"] > 0:
+        df = df[df['Slice'].ne(0)]  # Slice
+
+    for _, row in df.iterrows():
+        im = np.array([read_image(row['Filename'])])
+        try:
+            stack = np.concatenate([stack, im], axis=0)
+        except UnboundLocalError:
+            stack = im
+        except ValueError:
+            pass  # dimensions probably don't match
+
+    if len(stack) == 1:
+        max_intensity_image = stack[0]
+    else:
+        max_intensity_image = np.max(stack, axis=0)
+
+    total_intensity = np.sum(stack - np.percentile(stack, 5)) / np.prod(np.shape(stack))
+
+    return max_intensity_image, total_intensity
+
+
+def get_autoscale(df):
+    settings = read_log(df.iloc[0]['Filename'])
+    if settings["LED (V)"] > 0:
         df = df[df['Slice'].ne(0)]
 
     for _, row in df.iterrows():
         im = np.array([read_image(row['Filename'])])
         try:
-            stack = np.concatenate([stack, im], axis = 0)
+            stack = im
         except UnboundLocalError:
             stack = im
         except ValueError:
-            pass #dimensions probably don't match
+            pass  # dimensions probably don't match
 
     if len(stack) == 1:
         return stack[0]
@@ -444,16 +408,21 @@ def get_drift(df, tile, vmax=None):
         plt.ylim((0, 2))
         plt.show()
 
+
 if __name__ == "__main__":
-    dir = Path(r'/Volumes/DRIVE SVEN2/2PHOTON/211022/211023')
-    df_file = rf'{dir.parent}/dataframe.csv'
+    dir = Path(r'D:\210618')
+    df_file = rf'{dir}\dataframe.csv'  # dir.parent
+    print(df_file)
 
-    refresh_df_file = True
+    whole_folder = False  # do the whole folder
+    select_tile = 17  # if not using the whole folder, select what tiles to do
+    refresh_df_file = False
+
     if refresh_df_file:
-        # assemble dataframe from multiple folders/files
-        filenames = [str(f) for f in dir.glob('data_0*/data_*.dat')]
-
-        print(f'{len(filenames)} folders found.')
+        # assembe dataframe from multiple folders/files
+        filenames = [str(f) for f in dir.glob('data_0*\data_*.dat')]
+        if len(filenames) == 0:
+            filenames = [str(f) for f in dir.glob('*\data_0*\data_*.dat')]
         df = read_dat(filenames)
         foldername = Path(df['Filename'].iloc[0]).parent.parent
         df.to_csv(df_file)
@@ -483,20 +452,19 @@ if __name__ == "__main__":
     if 1:
         # create movie
         foldername = Path(df['Filename'].iloc[0]).parent.parent
-        foldername = Path(df_file).parent
-        for tile in list(set(df['Tile'].astype(int))):
-        # for tile in [34]:
-            stacks_to_movie(rf'{foldername}/Tile_{tile}_transmission.mp4', df, tile)
-            stacks_to_movie(rf'{foldername}/Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
+        foldername = Path(df_file).parent.parent
+        if whole_folder == True:
+            for tile in list(set(df['Tile'].astype(int))):
+                stacks_to_movie(rf'{foldername}\Tile_{tile}_transmission.mp4', df, tile)
+                stacks_to_movie(rf'{foldername}\Tile_{tile}_fluorescence.mp4', df, tile, merge_transmission=False)
+        else:
+            for tile in [select_tile]:
+                stacks_to_movie(rf'{foldername}\Tile_{tile}_transmission.mp4', df, tile, autoscale=True)
+                intensity = stacks_to_movie(rf'{foldername}\Tile_{tile}_fluorescence.mp4', df, tile,
+                                            merge_transmission=False, autoscale=True)
+                df = pd.DataFrame(intensity.T, columns=['Time (h)', 'Intensity (a.u.)'])
+                df.to_csv(rf'{foldername}\Tile_{tile}_intensity.csv', index=False)
 
-    if 0:
-        # create 3D object
-        foldername = Path(df['Filename'].iloc[0]).parent.parent
-        foldername = Path(df_file).parent
-        for tile in list(set(df['Tile'].astype(int))):
-            # for tile in [34]:
-            filename = stacks_to_3D(rf'{foldername}/Tile_{tile}_fluorescence.tif', df, tile, merge_transmission=False)
-            stackreg(filename, drift_correction=True)
 
     if 0:
         # stitch mosaic
