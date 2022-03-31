@@ -4,6 +4,7 @@ import pandas as pd
 from PIL import ImageDraw
 from imaris_ims_file_reader.ims import ims
 from scipy import fftpack
+from tqdm import tqdm
 
 from ProcessImages.ImageIO import find_peaks, create_circular_mask
 from ProcessImages.ImageIO2 import merge_rgb_images, scale_u8
@@ -50,7 +51,7 @@ def get_traces(image_stack, coords, radius):
     all_traces = []
     shape = np.shape(image_stack)
     shape = (shape[0], shape[-2], shape[-1])
-    for i, c in enumerate(coords):
+    for i, c in enumerate(tqdm(coords)):
         mask = create_circular_mask(radius * 2, size=shape[-2:], center=c).T
         traces = []
         for c in range(np.shape(image_stack)[1]):
@@ -96,13 +97,16 @@ def save_rgb(filename, image_stack, t=0, peaks=None, radius=10):
 
 
 filename = r'C:\Users\noort\Downloads\Plexi_Channel2_FOV4_dsDNAPol1_2022-03-21_Protocol 4_18.56.31.ims'
+print(f'Opening file: {filename}')
 image_stack = ims(filename)
-image_stack = cut_roi(image_stack, roi_width=200)
+image_stack = cut_roi(image_stack, roi_width=1000)
+print('Filtering ....')
 image_stack = filter(image_stack, highpass=5)
 
 radius = 6
 color = 1
-peaks = find_peaks(image_stack[0, color, 0, :, :], radius, n_traces=100, treshold_sd=3)
+print('Finding peaks...')
+peaks = find_peaks(image_stack[0, color, 0, :, :], radius, n_traces=10000, treshold_sd=2)
 
 for t in range(image_stack.shape[0]):
     save_rgb(filename, image_stack, t, peaks, radius)

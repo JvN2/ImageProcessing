@@ -256,15 +256,16 @@ def tiffs_to_traces(filename, n_pages=None, n_traces=None, width=10, scale=2, Ir
     return filename
 
 
-def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range=None, file_out="test.png"):
+def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range=None, file_out="test.png", show = False):
     if range is None:
         range = [np.median(image_array) - np.std(image_array), np.median(image_array) + 10 * np.std(image_array)]
-    image_out = Image.fromarray(scale_image_u8(image_array, range))
-    image_out = image_out.convert("RGBA")
-    image_draw = ImageDraw.Draw(image_out)
-    font = ImageFont.truetype('arial', 20 * scale)
-    text_position = 0.3 * scale * width * np.ones(2)
-    circle_position = scale * np.asarray([-width, -width, width, width]) / 2
+    if show:
+        image_out = Image.fromarray(scale_image_u8(image_array, range))
+        image_out = image_out.convert("RGBA")
+        image_draw = ImageDraw.Draw(image_out)
+        font = ImageFont.truetype('arial', 20 * scale)
+        text_position = 0.3 * scale * width * np.ones(2)
+        circle_position = scale * np.asarray([-width, -width, width, width]) / 2
 
     max = np.max(image_array)
     median = np.median(image_array)
@@ -273,17 +274,19 @@ def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range
     pos = []
     while max > treshold and trace_i < n_traces:
         max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
-        mask = create_circular_mask(np.shape(image_array), max_index, width)
+        mask = create_circular_mask(width, np.shape(image_array), max_index )
         image_array = mask * median + (1 - mask) * image_array
         max = np.max(image_array)
         max_index = np.flip(max_index) * scale
-        image_draw.text(text_position + max_index, f'{trace_i}', fill=(255, 0, 0, 255), font=font)
-        image_draw.ellipse(list(np.append(max_index, max_index) + circle_position), outline=(255, 0, 0, 255))
+        if show:
+            image_draw.text(text_position + max_index, f'{trace_i}', fill=(255, 0, 0, 255), font=font)
+            image_draw.ellipse(list(np.append(max_index, max_index) + circle_position), outline=(255, 0, 0, 255))
+            Image.fromarray(scale_image_u8(image_array, range)).show()
         trace_i += 1
         # print(trace_i)
         pos.append(max_index)
-        Image.fromarray(scale_image_u8(image_array, range)).show()
-    image_out.save(file_out)
+    if show:
+        image_out.save(file_out)
     return np.asarray(pos)
 
 
