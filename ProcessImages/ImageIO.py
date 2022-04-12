@@ -257,6 +257,7 @@ def tiffs_to_traces(filename, n_pages=None, n_traces=None, width=10, scale=2, Ir
 
 
 def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range=None, file_out="test.png", show = False):
+    print('Finding peaks ...')
     if range is None:
         range = [np.median(image_array) - np.std(image_array), np.median(image_array) + 10 * np.std(image_array)]
     if show:
