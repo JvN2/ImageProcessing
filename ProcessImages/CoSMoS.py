@@ -3,16 +3,58 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from PIL import ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from imaris_ims_file_reader.ims import ims
 from scipy import fftpack
 from tqdm import tqdm
 
-from ProcessImages.ImageIO import find_peaks, create_circular_mask
+from ProcessImages.ImageIO import create_circular_mask
 from ProcessImages.ImageIO2 import merge_rgb_images, scale_u8
 
 
-def filter_image(image, highpass=None, lowpass=None):
+def scale_image_u8(image_array, z_range=None):
+    if z_range is None:
+        z_range = [-2 ** 15, 2 ** 15]
+    image_array = np.uint8(np.clip((255 * (image_array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
+    return image_array
+
+
+def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range=None, file_out="test.png", show=False):
+    print('Finding peaks ...')
+    if range is None:
+        range = [np.median(image_array) - np.std(image_array), np.median(image_array) + 10 * np.std(image_array)]
+    if show:
+        image_out = Image.fromarray(scale_image_u8(image_array, range))
+        image_out = image_out.convert("RGBA")
+        image_draw = ImageDraw.Draw(image_out)
+        font = ImageFont.truetype('arial', 20 * scale)
+        text_position = 0.3 * scale * width * np.ones(2)
+        circle_position = scale * np.asarray([-width, -width, width, width]) / 2
+
+    max = np.max(image_array)
+    median = np.median(image_array)
+    treshold = np.median(image_array) + treshold_sd * np.std(image_array)
+    trace_i = 0
+    pos = []
+    while max > treshold and trace_i < n_traces:
+        max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
+        mask = create_circular_mask(width, np.shape(image_array), max_index)
+        image_array = mask * median + (1 - mask) * image_array
+        max = np.max(image_array)
+        max_index = np.flip(max_index) * scale
+        if show:
+            image_draw.text(text_position + max_index, f'{trace_i}', fill=(255, 0, 0, 255), font=font)
+            image_draw.ellipse(list(np.append(max_index, max_index) + circle_position), outline=(255, 0, 0, 255))
+            Image.fromarray(scale_image_u8(image_array, range)).show()
+        trace_i += 1
+        # print(trace_i)
+        pos.append(max_index)
+    if show:
+        image_out.save(file_out)
+    return np.asarray(pos)
+
+
+def filter_image(image, highpass=None, lowpass=None, show=False):
     size = len(image[0])
     x = np.outer(np.linspace(-size / 2, size / 2, size), np.ones(size)) - 0.5
     y = x.T
@@ -30,6 +72,11 @@ def filter_image(image, highpass=None, lowpass=None):
 
     im_fft = fftpack.fftshift(im_fft)
     image = np.real(fftpack.ifft2(im_fft)).astype(float)
+
+    if show:
+        plt.imshow(filter)
+        plt.show()
+
     return image
 
 
@@ -176,18 +223,25 @@ def read_header(filename):
 # filename = r'C:\Users\noort\Downloads\Plexi_Channel2_FOV4_dsDNAPol1_2022-03-21_Protocol 4_18.56.31.ims'
 # filename = r'C:\Users\noort\Downloads\Slide2_Channel1_FOV2_512_Int100_Exp50_Rep05_Pol1_2022-04-06_Protocol 2_16.32.11.ims'
 filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
-filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
+# filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
 
 header = read_header(filename)
+header['colors'] = ['561', '488', '637'] # overrule header
 
-image_stack = ims(filename)
-image_stack = cut_roi(image_stack, roi_width=500)
-image_stack = filter_image_stack(image_stack, highpass=5)
+if True:
+    image_stack = ims(filename)
+    image_stack = cut_roi(image_stack, roi_width=512)
+    image_stack = filter_image_stack(image_stack, highpass=15)
 
-radius = 400 / header['nm_pix']
-peaks = find_peaks(image_stack[0, header['colors'].index('561'), 0, :, :], radius, n_traces=10000, treshold_sd=3)
-save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
+    radius = 300 / header['nm_pix']
+    selection_image = np.zeros_like(image_stack[0, 0, 0, :, :])
+    for color in ['488', '637']:
+        selection_image += np.percentile(image_stack[:, header['colors'].index(color), 0, :, :], 70, axis=0)
+    selection_image = filter_image(selection_image, lowpass=40)
 
-traces = get_traces(image_stack, peaks, radius)
-save_traces(filename.replace('.ims', '.csv'), traces, header)
-save_traces(filename.replace('.ims', '_traces.mp4'), traces, header)
+    peaks = find_peaks(selection_image, radius * 2, n_traces=10000, treshold_sd=3.5)
+    save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
+
+    traces = get_traces(image_stack, peaks, radius)
+    save_traces(filename.replace('.ims', '.csv'), traces, header)
+    save_traces(filename.replace('.ims', '_traces.mp4'), traces, header)
