@@ -177,6 +177,7 @@ def save_traces(filename, traces, header):
             fig = plt.figure()
             for i, channel in enumerate(header['colors']):
                 plt.plot(header['time'], trace[i], color=plot_colors[channel], label=f'{channel} nm')
+                # plt.scatter(header['time'], trace[i], color="none", edgecolor=plot_colors[channel], label=f'{channel} nm')
             plt.legend(loc="upper right")
             plt.xlabel('Time (s)')
             plt.ylabel('Intensity (a.u.)')
@@ -220,28 +221,31 @@ def read_header(filename):
     return header
 
 
-# filename = r'C:\Users\noort\Downloads\Plexi_Channel2_FOV4_dsDNAPol1_2022-03-21_Protocol 4_18.56.31.ims'
-# filename = r'C:\Users\noort\Downloads\Slide2_Channel1_FOV2_512_Int100_Exp50_Rep05_Pol1_2022-04-06_Protocol 2_16.32.11.ims'
-filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
-# filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
+if __name__ is '__main__':
+    # filename = r'C:\Users\noort\Downloads\Plexi_Channel2_FOV4_dsDNAPol1_2022-03-21_Protocol 4_18.56.31.ims'
+    # filename = r'C:\Users\noort\Downloads\Slide2_Channel1_FOV2_512_Int100_Exp50_Rep05_Pol1_2022-04-06_Protocol 2_16.32.11.ims'
+    filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
+    # filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
 
-header = read_header(filename)
-header['colors'] = ['561', '488', '637'] # overrule header
+    header = read_header(filename)
+    # print(header['colors'])
+    # header['colors'] = ['561', '488', '637'] # overrule header
+    # print(header['colors'])
 
-if True:
-    image_stack = ims(filename)
-    image_stack = cut_roi(image_stack, roi_width=512)
-    image_stack = filter_image_stack(image_stack, highpass=15)
+    if True:
+        image_stack = ims(filename)
+        image_stack = cut_roi(image_stack, roi_width=512)
+        image_stack = filter_image_stack(image_stack, highpass=15)
 
-    radius = 300 / header['nm_pix']
-    selection_image = np.zeros_like(image_stack[0, 0, 0, :, :])
-    for color in ['488', '637']:
-        selection_image += np.percentile(image_stack[:, header['colors'].index(color), 0, :, :], 70, axis=0)
-    selection_image = filter_image(selection_image, lowpass=40)
+        radius = 300 / header['nm_pix']
+        selection_image = np.zeros_like(image_stack[0, 0, 0, :, :])
+        for color in ['488', '637']:
+            selection_image += np.percentile(image_stack[:, header['colors'].index(color), 0, :, :], 70, axis=0)
+        selection_image = filter_image(selection_image, lowpass=40)
 
-    peaks = find_peaks(selection_image, radius * 2, n_traces=10000, treshold_sd=3.5)
-    save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
+        peaks = find_peaks(selection_image, radius * 2, n_traces=10000, treshold_sd=3.5)
+        save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
 
-    traces = get_traces(image_stack, peaks, radius)
-    save_traces(filename.replace('.ims', '.csv'), traces, header)
-    save_traces(filename.replace('.ims', '_traces.mp4'), traces, header)
+        traces = get_traces(image_stack, peaks, radius)
+        save_traces(filename.replace('.ims', '.csv'), traces, header)
+        save_traces(filename.replace('.ims', '_traces.mp4'), traces, header)
