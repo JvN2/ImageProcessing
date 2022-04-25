@@ -77,5 +77,5 @@ def analyze_traces(filename, save = False):
 filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.csv'
 # filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.csv'
 
-analyze_traces(filename, save=True)
+analyze_traces(filename, save=False)
 
