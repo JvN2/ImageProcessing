@@ -48,7 +48,7 @@ def analyze_traces(filename, save = False):
         comment = ''
         try:
             states, mus, sigmas, P, logProb, samples = fitHMM(intensity)
-            if mus[1] < 100:
+            if mus[1] < 200:
                 states *= 0
                 mus[0] = np.median(intensity)
                 comment = ', No binding'
@@ -76,6 +76,8 @@ def analyze_traces(filename, save = False):
 
 filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.csv'
 # filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.csv'
+filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.csv'
+# filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.csv'
 
-analyze_traces(filename, save=False)
+analyze_traces(filename, save=True)
 

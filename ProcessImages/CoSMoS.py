@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 from imaris_ims_file_reader.ims import ims
-from scipy import fftpack
+from scipy import fftpack, ndimage
 from tqdm import tqdm
 
-from ProcessImages.ImageIO import create_circular_mask
+from ProcessImages.ImageIO import create_circular_mask, get_roi, fit_peak
 from ProcessImages.ImageIO2 import merge_rgb_images, scale_u8
 
 
@@ -101,7 +101,7 @@ def get_traces(image_stack, coords, radius):
     all_traces = []
     shape = np.shape(image_stack)
     shape = (shape[0], shape[-2], shape[-1])
-    for i, c in enumerate(tqdm(coords)):
+    for i, c in enumerate(tqdm(coords, 'Getting traces')):
         mask = create_circular_mask(radius * 2, size=shape[-2:], center=c).T
         traces = []
         for c in range(np.shape(image_stack)[1]):
@@ -110,37 +110,48 @@ def get_traces(image_stack, coords, radius):
     return np.asarray(all_traces)
 
 
-def cut_roi(image_stack, roi_width, center=None):
+def stack_cut_roi(image_stack, roi_width, center=None):
     if center is None:
-        roi_center = np.asarray(image_stack.shape[-2:]) // 2
-    roi_corners = np.asarray([roi_center - roi_width // 2])
+        center = np.asarray(image_stack.shape[-2:]) // 2
+    else:
+        center = np.asarray(center)
+    roi_corners = np.asarray([center - roi_width // 2])
     roi_corners = np.append(roi_corners, roi_corners + roi_width)
     image_stack = image_stack[:, :, :, roi_corners[0]:roi_corners[2], roi_corners[1]:roi_corners[3]]
     return image_stack
 
 
-def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, radius=10, numbers=False, fps=2):
+def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, radius=10, color_ranges=None,
+                     numbers=False, fps=2):
     if frames is None:
         frames = range(image_stack.shape[0])
     im_rgb = np.zeros([3, image_stack.shape[-2], image_stack.shape[-1]])
     image_colors = {'637': 0, '561': 1, '488': 2}
-
+    print(np.shape(im_rgb), channels)
     ims = []
+
+    if color_ranges is None:
+        color_ranges = []
+        for color, _ in enumerate(channels):
+            std = get_background(image_stack[0, color, 0, :, :])
+            color_ranges.append([-std, 20 * std])
+
     for frame in frames:
-        for color, channel in enumerate(channels):
+        for color, (channel, color_range) in enumerate(zip(channels, color_ranges)):
             image = image_stack[frame, color, 0, :, :]
-            std = get_background(image)
-            im_rgb[image_colors[channel]] = scale_u8(image, [-std, 20 * std])
+            im_rgb[image_colors[channel]] = scale_u8(image, color_range)
         im = merge_rgb_images(im_rgb[0] * 0, im_rgb[0], im_rgb[1], im_rgb[2])
 
-        for i, coord in enumerate(peaks):
-            bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
+        if peaks is not None:
             draw = ImageDraw.Draw(im)
-            draw.ellipse(bbox, fill=None, outline='white')
-            bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
-            if frame == frames[0]:
-                draw.text(bbox, str(i), color='white')
-        del draw
+            for i, coord in enumerate(peaks):
+                bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
+                draw.ellipse(bbox, fill=None, outline='white')
+                bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
+                if frame == frames[0]:
+                    draw.text(bbox, str(i), color='white')
+            del draw
+
         ims.append(im)
     save_cv2_movie(filename, ims, fps)
 
@@ -221,30 +232,113 @@ def read_header(filename):
     return header
 
 
-if __name__ is '__main__':
+def correct_drift(image_stack, sub_pixel=False):
+    colors = [-1]
+    ref_image = None
+    shifts = [[0, 0]]
+    for frame in tqdm(range(image_stack.shape[0] - 1), 'Drift correction'):
+        if ref_image is None:
+            ref_image = np.sum(image_stack[frame, colors, 0, :, :], axis=0)
+        image = np.sum(image_stack[frame + 1, colors, 0, :, :], axis=0)
+
+        # shift, _, _ = phase_cross_correlation(ref_image, image)
+        shift = get_drift(image, ref_image, sub_pixel=True)
+        image_stack[frame + 1,] = ndimage.shift(image_stack[frame + 1,], [0, 0, shift[0], shift[1]])
+        shifts.append(shift)
+        # ref_image = None
+
+    plt.plot(np.asarray(shifts))
+    plt.show()
+    return image_stack
+
+
+def get_drift(image, ref_image, sub_pixel=True):
+    shift_image = np.abs(np.fft.fftshift(np.fft.ifft2(np.fft.fft2(image).conjugate() * np.fft.fft2(ref_image))))
+
+    max = np.asarray(np.unravel_index(np.argmax(shift_image, axis=None), shift_image.shape))
+    if sub_pixel:
+        _, offset = fit_peak(get_roi(shift_image, max, 10))
+        max = max + np.asarray([offset[0].nominal_value, offset[1].nominal_value])
+    shift = max - (np.asarray(np.shape(shift_image)) - 1) / 2
+    return shift
+
+
+def generate_test_image(peaks, size=512, width=5):
+    image = np.zeros((size, size))
+    x = np.linspace(0, size, size)
+    x, y = np.meshgrid(x, x)
+
+    for peak in peaks:
+        r = ((x - peak[0]) ** 2 + (y - peak[1]) ** 2) ** 0.5
+        image += np.exp(-(r / (2 * width)) ** 2)
+    return image
+
+
+def test_drift():
+    size = 256
+    peaks = np.random.uniform(size, size=(50, 2))
+    peaks = peaks[peaks[:, 1].argsort()]
+    im = generate_test_image(peaks, size, 3)
+
+    drift = np.linspace(0, 20, 20)
+
+    stack = [ndimage.shift(im, [d, 0]) for d in drift]
+    stack = np.reshape(stack, [-1, 1, 1, size, size])
+
+    stack = correct_drift(stack)
+    save_image_stack(r'c:\tmp\test.mp4', stack, ['637'], peaks=peaks, color_ranges=[[-0.2, 1.5]])
+
+
+if __name__ == '__main__':
+
+    test_drift()
+    breakpoint()
+
+    # size = 512
+    # n = 100
+    # peaks = np.random.uniform(0, size, [n, 2])
+    # ref_image = generate_test_image(peaks, size, 2.5)
+    # shift = [20.4, 53.2]
+    # image = ndimage.shift(ref_image, shift)
+    # shift = get_drift(image, ref_image)
+    #
+    # corrected_image = ndimage.shift(image, shift)
+    #
+    # for im in [image, corrected_image, ref_image]:
+    #     plt.imshow(im, origin='lower')
+    #     plt.show()
+    # breakpoint()
+
     # filename = r'C:\Users\noort\Downloads\Plexi_Channel2_FOV4_dsDNAPol1_2022-03-21_Protocol 4_18.56.31.ims'
     # filename = r'C:\Users\noort\Downloads\Slide2_Channel1_FOV2_512_Int100_Exp50_Rep05_Pol1_2022-04-06_Protocol 2_16.32.11.ims'
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
     # filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
+    filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
+    filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.ims'
 
     header = read_header(filename)
     # print(header['colors'])
     # header['colors'] = ['561', '488', '637'] # overrule header
-    # print(header['colors'])
+    print(header['colors'])
 
     if True:
         image_stack = ims(filename)
-        image_stack = cut_roi(image_stack, roi_width=512)
+        print(image_stack.resolution)
+        image_stack = stack_cut_roi(image_stack, roi_width=512)
         image_stack = filter_image_stack(image_stack, highpass=15)
+
+        image_stack = correct_drift(image_stack)
 
         radius = 300 / header['nm_pix']
         selection_image = np.zeros_like(image_stack[0, 0, 0, :, :])
-        for color in ['488', '637']:
-            selection_image += np.percentile(image_stack[:, header['colors'].index(color), 0, :, :], 70, axis=0)
+        for color in ['637']:
+            selection_image += np.percentile(image_stack[:10, header['colors'].index(color), 0, :, :], 70, axis=0)
         selection_image = filter_image(selection_image, lowpass=40)
 
         peaks = find_peaks(selection_image, radius * 2, n_traces=10000, treshold_sd=3.5)
         save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
+
+        breakpoint()
 
         traces = get_traces(image_stack, peaks, radius)
         save_traces(filename.replace('.ims', '.csv'), traces, header)

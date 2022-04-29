@@ -390,7 +390,7 @@ def find_peaks2(image_array, width=25, scale=1, treshold_sd=3, n_peaks=20, range
 
 def get_roi(image_array, pos, width):
     # pos = np.flip(pos)
-    bottom_left = pos - width // 2
+    bottom_left = np.asarray(pos) - width // 2
     roi = image_array[bottom_left[0]:bottom_left[0] + width, bottom_left[1]:bottom_left[1] + width]
     return roi
 
