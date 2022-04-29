@@ -34,24 +34,27 @@ def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range
     max = np.max(image_array)
     median = np.median(image_array)
     treshold = np.median(image_array) + treshold_sd * np.std(image_array)
-    trace_i = 0
-    pos = []
-    while max > treshold and trace_i < n_traces:
+    peak_i = 0
+    peaks = []
+    while max > treshold and peak_i < n_traces:
         max_index = np.asarray(np.unravel_index(np.argmax(image_array, axis=None), image_array.shape))
         mask = create_circular_mask(width, np.shape(image_array), max_index)
         image_array = mask * median + (1 - mask) * image_array
         max = np.max(image_array)
         max_index = np.flip(max_index) * scale
         if show:
-            image_draw.text(text_position + max_index, f'{trace_i}', fill=(255, 0, 0, 255), font=font)
+            image_draw.text(text_position + max_index, f'{peak_i}', fill=(255, 0, 0, 255), font=font)
             image_draw.ellipse(list(np.append(max_index, max_index) + circle_position), outline=(255, 0, 0, 255))
             Image.fromarray(scale_image_u8(image_array, range)).show()
-        trace_i += 1
-        # print(trace_i)
-        pos.append(max_index)
+        peak_i += 1
+        peaks.append(max_index)
+    peaks = np.asarray(peaks)
+    peaks = peaks[peaks[:, 1].argsort()]
+
     if show:
         image_out.save(file_out)
-    return np.asarray(pos)
+
+    return peaks
 
 
 def filter_image(image, highpass=None, lowpass=None, show=False):
@@ -234,20 +237,19 @@ def read_header(filename):
 
 def correct_drift(image_stack, sub_pixel=False):
     colors = [-1]
-    ref_image = None
-    shifts = [[0, 0]]
+    persistence = 1
+    shifts = pd.DataFrame([[0, 0]], columns=['x (pix)', 'y (pix)'])
+
+    ref_image = np.sum(image_stack[0, colors, 0, :, :], axis=0)
     for frame in tqdm(range(image_stack.shape[0] - 1), 'Drift correction'):
-        if ref_image is None:
-            ref_image = np.sum(image_stack[frame, colors, 0, :, :], axis=0)
+        ref_image = persistence * ref_image + (1 - persistence) * np.sum(image_stack[frame, colors, 0, :, :], axis=0)
         image = np.sum(image_stack[frame + 1, colors, 0, :, :], axis=0)
-
-        # shift, _, _ = phase_cross_correlation(ref_image, image)
-        shift = get_drift(image, ref_image, sub_pixel=True)
+        shift = get_drift(image, ref_image, sub_pixel=sub_pixel)
         image_stack[frame + 1,] = ndimage.shift(image_stack[frame + 1,], [0, 0, shift[0], shift[1]])
-        shifts.append(shift)
-        # ref_image = None
+        shifts.loc[frame + 1] = shift
 
-    plt.plot(np.asarray(shifts))
+    print(shifts)
+    plt.plot(shifts)
     plt.show()
     return image_stack
 
