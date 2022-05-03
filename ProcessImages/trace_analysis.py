@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ProcessImages.CoSMoS import save_cv2_movie
+from ProcessImages.CoSMoS import save_movie
 
 def fitHMM(Q):
     nSamples = len(Q)
@@ -71,7 +71,7 @@ def analyze_traces(filename, save = False):
             ims.append(img)
 
     if save:
-        save_cv2_movie(filename.replace('.csv', '_binding.mp4'), ims, 1)
+        save_movie(filename.replace('.csv', '_binding.mp4'), ims, 1)
 
 
 filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.csv'

@@ -1,4 +1,4 @@
-import cv2
+import cv2, io
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,7 +19,7 @@ def scale_image_u8(image_array, z_range=None):
     return image_array
 
 
-def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range=None, file_out="test.png", show=False):
+def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=2000, range=None, file_out="test.png", show=False):
     print('Finding peaks ...')
     if range is None:
         range = [np.median(image_array) - np.std(image_array), np.median(image_array) + 10 * np.std(image_array)]
@@ -49,7 +49,8 @@ def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range
         peak_i += 1
         peaks.append(max_index)
     peaks = np.asarray(peaks)
-    peaks = peaks[peaks[:, 1].argsort()]
+    if peaks.any():
+        peaks = peaks[peaks[:, 1].argsort()]
 
     if show:
         image_out.save(file_out)
@@ -57,7 +58,7 @@ def find_peaks(image_array, width=20, scale=1, treshold_sd=3, n_traces=20, range
     return peaks
 
 
-def filter_image(image, highpass=None, lowpass=None, show=False):
+def filter_image(image, highpass=None, lowpass=None):
     size = len(image[0])
     x = np.outer(np.linspace(-size / 2, size / 2, size), np.ones(size)) - 0.5
     y = x.T
@@ -65,9 +66,9 @@ def filter_image(image, highpass=None, lowpass=None, show=False):
     filter = np.ones_like(image).astype(float)
 
     if highpass is not None:
-        filter *= 1 / (1 + 2 ** (6 * (highpass - r)))  # Butterworth filter
+        filter *= 1 / (1 + 2 ** (6 * (size / highpass - r)))  # Butterworth filter
     if lowpass is not None:
-        filter *= np.exp(-(r / (2 * lowpass)) ** 2)  # Gaussian filter
+        filter *= np.exp(-(r / (2 * size / lowpass)) ** 2)  # Gaussian filter
 
     im_fft = fftpack.fft2(image)
     im_fft = fftpack.fftshift(im_fft)
@@ -76,19 +77,15 @@ def filter_image(image, highpass=None, lowpass=None, show=False):
     im_fft = fftpack.fftshift(im_fft)
     image = np.real(fftpack.ifft2(im_fft)).astype(float)
 
-    if show:
-        plt.imshow(filter)
-        plt.show()
-
     return image
 
 
-def filter_image_stack(image_stack, highpass=5, low_pas=None):
-    print('Filtering ....')
+def filter_image_stack(image_stack, highpass=None, lowpass=None, offset=True):
     shape = np.shape(image_stack)
     image_stack = np.reshape(image_stack, (-1, shape[-2], shape[-1]))
-    image_stack = [filter_image(image, highpass) for image in image_stack]
-    image_stack = [image - np.percentile(image, 50) for image in image_stack]
+    image_stack = [filter_image(image, highpass, lowpass) for image in image_stack]
+    if offset:
+        image_stack = [image - np.percentile(image, 50) for image in image_stack]
     image_stack = np.reshape(np.asarray(image_stack), shape)
     return image_stack
 
@@ -100,7 +97,7 @@ def get_background(image):
     return std
 
 
-def get_traces(image_stack, coords, radius):
+def get_traces(image_stack, coords, radius, header):
     all_traces = []
     shape = np.shape(image_stack)
     shape = (shape[0], shape[-2], shape[-1])
@@ -110,7 +107,16 @@ def get_traces(image_stack, coords, radius):
         for c in range(np.shape(image_stack)[1]):
             traces.append([np.sum(image * mask) for image in np.reshape(image_stack[:, c, :, :, :], shape)])
         all_traces.append(traces)
-    return np.asarray(all_traces)
+
+    column_names = []
+    for trace_nr, trace in enumerate(all_traces):
+        for i, channel in enumerate(header['colors']):
+            column_names.append(f'{trace_nr}: I{channel}nm (a.u.)')
+
+    df = pd.DataFrame(np.reshape(all_traces, (-1, np.shape(traces)[-1])).T, columns=column_names)
+    df['Time (s)'] = header['time']
+    df.set_index(['Time (s)'], inplace=True)
+    return df
 
 
 def stack_cut_roi(image_stack, roi_width, center=None):
@@ -124,13 +130,12 @@ def stack_cut_roi(image_stack, roi_width, center=None):
     return image_stack
 
 
-def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, radius=10, color_ranges=None,
-                     numbers=False, fps=2):
+def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, radius=10, color_ranges=None, fps=2):
     if frames is None:
         frames = range(image_stack.shape[0])
     im_rgb = np.zeros([3, image_stack.shape[-2], image_stack.shape[-1]])
     image_colors = {'637': 0, '561': 1, '488': 2}
-    print(np.shape(im_rgb), channels)
+
     ims = []
 
     if color_ranges is None:
@@ -145,21 +150,25 @@ def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, r
             im_rgb[image_colors[channel]] = scale_u8(image, color_range)
         im = merge_rgb_images(im_rgb[0] * 0, im_rgb[0], im_rgb[1], im_rgb[2])
 
+        draw = ImageDraw.Draw(im)
         if peaks is not None:
-            draw = ImageDraw.Draw(im)
+
             for i, coord in enumerate(peaks):
                 bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
                 draw.ellipse(bbox, fill=None, outline='white')
                 bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
                 if frame == frames[0]:
                     draw.text(bbox, str(i), color='white')
-            del draw
+
+        draw.text([10, 10], f'Frame {frame}', color='white')
+        del draw
 
         ims.append(im)
-    save_cv2_movie(filename, ims, fps)
+    save_movie(filename, ims, fps)
 
 
-def save_cv2_movie(filename, ims, fps):
+def save_movie(filename, ims, fps):
+    codec = {'avi': 'DIVX', 'mp4': 'mp4v'}
     ext = filename[-3:]
     frames = range(np.shape(ims)[0])
     if ext == 'jpg':
@@ -167,55 +176,56 @@ def save_cv2_movie(filename, ims, fps):
             im.save(filename.replace('.jpg', f'_{frame}.jpg'))
     elif ext == 'gif':
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
-    elif ext in ['avi', 'mp4']:
-        height, width, layers = np.asarray(ims[0]).shape
-        size = (width, height)
-        if ext == 'avi':
-            codec = 'DIVX'
-        elif ext == 'mp4':
-            codec = 'mp4v'
-        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec), fps, size)
+    elif ext in codec.keys():
+        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, np.array(ims[0]).shape[:2])
         for im in ims:
-            out.write(cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2BGR))
+            out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         out.release()
     else:
         print('Filetype {ext} not supported.')
 
 
-def save_traces(filename, traces, header):
+def save_traces(filename, traces):
+    trace_nrs = list(set([t.split(': ')[0] for t in traces.columns if ': ' in t]))
+    colors = list(set([t.split(': I')[1][:3] for t in traces.columns if ': I' in t]))
+
     ext = filename[-3:]
     if ext in ['mp4', 'jpg']:
         plot_colors = {'637': 'r', '561': 'g', '488': 'b'}
+        buffer_format = {'jpg':'jpg', 'mp4': 'png'}
         ims = []
-        for trace_nr, trace in enumerate(traces):
+        for trace_nr in trace_nrs:
             fig = plt.figure()
-            for i, channel in enumerate(header['colors']):
-                plt.plot(header['time'], trace[i], color=plot_colors[channel], label=f'{channel} nm')
-                # plt.scatter(header['time'], trace[i], color="none", edgecolor=plot_colors[channel], label=f'{channel} nm')
+            for color in colors:
+                plt.plot(traces.index, traces[f'{trace_nr}: I{color}nm (a.u.)'], color=plot_colors[color], label=f'{color} nm')
             plt.legend(loc="upper right")
             plt.xlabel('Time (s)')
             plt.ylabel('Intensity (a.u.)')
-            plt.title(f'Peak {trace_nr} @{peaks[trace_nr][0]}, {peaks[trace_nr][1]}')
+            plt.title(f'Peak {trace_nr}')
             plt.ylim(-200, 2500)
             plt.show()
 
-            img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img = np.reshape(img, fig.canvas.get_width_height()[::-1] + (3,))
+            # img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            # img = np.reshape(img, fig.canvas.get_width_height()[::-1] + (3,))
+
+            # lst = list(fig.canvas.get_width_height()).append(3)
+            # img = Image.fromarray(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(lst))
+
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format = buffer_format[ext])
+            buf.seek(0)
+            img = Image.open(buf)
+
             ims.append(img)
+
         if ext == 'mp4':
-            save_cv2_movie(filename.replace('.ims', '_traces.mp4'), ims, 1)
+            save_movie(filename.replace('.ims', f'_traces.{ext}'), ims, 1)
         else:
             for frame, im in enumerate(ims):
                 im.save(filename.replace('.jpg', f'_{frame}.jpg'))
     elif ext == 'csv':
-        column_names = []
-        for trace_nr, trace in enumerate(traces):
-            for i, channel in enumerate(header['colors']):
-                column_names.append(f'Peak {trace_nr}: {channel} nm')
-        df = pd.DataFrame(np.reshape(traces, (-1, np.shape(traces)[-1])).T, columns=column_names)
-        df['Time (s)'] = header['time']
-        df.set_index(['Time (s)'], inplace=True)
-        df.to_csv(filename.replace('ims', 'csv'))
+        traces.to_csv(filename.replace('ims', 'csv'))
 
 
 def read_header(filename):
@@ -235,11 +245,11 @@ def read_header(filename):
     return header
 
 
-def correct_drift(image_stack, sub_pixel=False):
-    colors = [-1]
-    persistence = 1
-    shifts = pd.DataFrame([[0, 0]], columns=['x (pix)', 'y (pix)'])
+def correct_drift(image_stack, sub_pixel=False, persistence=0.9, colors=None):
+    if colors is None:
+        colors = np.arange(np.shape(image_stack)[1])
 
+    shifts = pd.DataFrame([[0, 0]], columns=['x (pix)', 'y (pix)'])
     ref_image = np.sum(image_stack[0, colors, 0, :, :], axis=0)
     for frame in tqdm(range(image_stack.shape[0] - 1), 'Drift correction'):
         ref_image = persistence * ref_image + (1 - persistence) * np.sum(image_stack[frame, colors, 0, :, :], axis=0)
@@ -247,21 +257,16 @@ def correct_drift(image_stack, sub_pixel=False):
         shift = get_drift(image, ref_image, sub_pixel=sub_pixel)
         image_stack[frame + 1,] = ndimage.shift(image_stack[frame + 1,], [0, 0, shift[0], shift[1]])
         shifts.loc[frame + 1] = shift
-
-    print(shifts)
-    plt.plot(shifts)
-    plt.show()
-    return image_stack
+    return image_stack, shifts
 
 
 def get_drift(image, ref_image, sub_pixel=True):
     shift_image = np.abs(np.fft.fftshift(np.fft.ifft2(np.fft.fft2(image).conjugate() * np.fft.fft2(ref_image))))
-
     max = np.asarray(np.unravel_index(np.argmax(shift_image, axis=None), shift_image.shape))
     if sub_pixel:
         _, offset = fit_peak(get_roi(shift_image, max, 10))
-        max = max + np.asarray([offset[0].nominal_value, offset[1].nominal_value])
-    shift = max - (np.asarray(np.shape(shift_image)) - 1) / 2
+        max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
+    shift = max - np.asarray(np.shape(shift_image)) / 2.0
     return shift
 
 
@@ -277,25 +282,35 @@ def generate_test_image(peaks, size=512, width=5):
 
 
 def test_drift():
-    size = 256
-    peaks = np.random.uniform(size, size=(50, 2))
+    im_size = 256
+    n_colors = 3
+    n_peaks = 30
+    n_frames = 100
+    peaks = np.random.uniform(im_size, size=(n_peaks, 2))
     peaks = peaks[peaks[:, 1].argsort()]
-    im = generate_test_image(peaks, size, 3)
+    peaks0 = peaks.copy()
+    drift = np.linspace(0, 15, n_frames)
+    image_stack = []
+    noise = np.random.poisson(150, size=(n_colors, im_size, im_size))
+    for d in drift:
+        im = 300 * generate_test_image(peaks, im_size, 3)
+        image_stack.append(np.asarray([ndimage.shift(im, [d, 0])] * n_colors) + noise)
+        peaks[np.random.randint(n_peaks)] = np.random.uniform(im_size, size=2)
+    image_stack = np.reshape(image_stack, [-1, n_colors, 1, im_size, im_size])
+    image_stack = filter_image_stack(image_stack, highpass=None)  # , lowpass=im_size/4)
 
-    drift = np.linspace(0, 20, 20)
+    image_stack, shifts = correct_drift(image_stack, sub_pixel=True, persistence=0.95)
 
-    stack = [ndimage.shift(im, [d, 0]) for d in drift]
-    stack = np.reshape(stack, [-1, 1, 1, size, size])
+    plt.plot(-drift, color='k')
+    plt.plot(0 * drift, color='k')
+    plt.plot(shifts, marker='o', linestyle='none', markerfacecolor='None')
+    plt.show()
 
-    stack = correct_drift(stack)
-    save_image_stack(r'c:\tmp\test.mp4', stack, ['637'], peaks=peaks, color_ranges=[[-0.2, 1.5]])
+    save_image_stack(r'c:\tmp\test.mp4', image_stack, ['637', '561', '488'], peaks=peaks0,
+                     color_ranges=[[-10, 300]] * 3)
 
 
 if __name__ == '__main__':
-
-    test_drift()
-    breakpoint()
-
     # size = 512
     # n = 100
     # peaks = np.random.uniform(0, size, [n, 2])
@@ -316,32 +331,36 @@ if __name__ == '__main__':
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
     # filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV14_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.38.58.ims'
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
-    filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.ims'
-
-    header = read_header(filename)
-    # print(header['colors'])
-    # header['colors'] = ['561', '488', '637'] # overrule header
-    print(header['colors'])
+    # filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.ims'
 
     if True:
+        roi_width = 150
+        header = read_header(filename)
+        # print(header['colors'])
+        # header['colors'] = ['561', '488', '637'] # overrule header
+        # print(header['colors'])
         image_stack = ims(filename)
-        print(image_stack.resolution)
-        image_stack = stack_cut_roi(image_stack, roi_width=512)
-        image_stack = filter_image_stack(image_stack, highpass=15)
+        # print(image_stack.resolution)
+        image_stack = stack_cut_roi(image_stack, roi_width=roi_width)
+        # image_stack = image_stack[::5, ]
+        image_stack = filter_image_stack(image_stack)
+        # image_stack, drift = correct_drift(image_stack, sub_pixel=True, persistence=0.95)
 
-        image_stack = correct_drift(image_stack)
-
-        radius = 300 / header['nm_pix']
-        selection_image = np.zeros_like(image_stack[0, 0, 0, :, :])
+        radius = 250 / header['nm_pix']
+        selection_image = np.zeros_like(image_stack[0, 0, 0, :, :]).astype(float)
         for color in ['637']:
-            selection_image += np.percentile(image_stack[:10, header['colors'].index(color), 0, :, :], 70, axis=0)
-        selection_image = filter_image(selection_image, lowpass=40)
+            selection_image += np.percentile(image_stack[:10, header['colors'].index(color), 0, :, :], 80, axis=0)
+        selection_image = filter_image(selection_image)
 
-        peaks = find_peaks(selection_image, radius * 2, n_traces=10000, treshold_sd=3.5)
+        peaks = find_peaks(selection_image, radius * 4, treshold_sd=3.5)
         save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
 
-        breakpoint()
+        traces = get_traces(image_stack, peaks, radius, header)
+        # for d in drift.columns[::-1]:
+        #     traces.insert(0, f'Drift_{d.replace("pix", "um")}', drift[d].values *header['nm_pix'])
 
-        traces = get_traces(image_stack, peaks, radius)
-        save_traces(filename.replace('.ims', '.csv'), traces, header)
-        save_traces(filename.replace('.ims', '_traces.mp4'), traces, header)
+        save_traces(filename.replace('.ims', '.csv'), traces)
+        # save_traces(filename.replace('.ims', '_traces.mp4'), traces)
+        save_traces(r'c:\tmp\test.mp4', traces)
+    else:
+        test_drift()
