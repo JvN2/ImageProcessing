@@ -177,7 +177,7 @@ def save_movie(filename, ims, fps):
     elif ext == 'gif':
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
     elif ext in codec.keys():
-        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, np.array(ims[0]).shape[:2])
+        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, np.array(ims[0]).shape[:2][::-1])
         for im in ims:
             out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         out.release()
@@ -205,18 +205,13 @@ def save_traces(filename, traces):
             plt.ylim(-200, 2500)
             plt.show()
 
-            # img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            # img = np.reshape(img, fig.canvas.get_width_height()[::-1] + (3,))
+            # buf = io.BytesIO()
+            # fig.savefig(buf, format = buffer_format[ext])
+            # buf.seek(0)
+            # img = Image.open(buf)
 
-            # lst = list(fig.canvas.get_width_height()).append(3)
-            # img = Image.fromarray(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(lst))
-
-
-            buf = io.BytesIO()
-            fig.savefig(buf, format = buffer_format[ext])
-            buf.seek(0)
-            img = Image.open(buf)
-
+            img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            img = np.reshape(img, fig.canvas.get_width_height()[::-1] + (3,))
             ims.append(img)
 
         if ext == 'mp4':
@@ -245,7 +240,7 @@ def read_header(filename):
     return header
 
 
-def correct_drift(image_stack, sub_pixel=False, persistence=0.9, colors=None):
+def correct_drift(image_stack, sub_pixel=False, persistence=0.9, colors=None, show = False):
     if colors is None:
         colors = np.arange(np.shape(image_stack)[1])
 
@@ -257,6 +252,14 @@ def correct_drift(image_stack, sub_pixel=False, persistence=0.9, colors=None):
         shift = get_drift(image, ref_image, sub_pixel=sub_pixel)
         image_stack[frame + 1,] = ndimage.shift(image_stack[frame + 1,], [0, 0, shift[0], shift[1]])
         shifts.loc[frame + 1] = shift
+
+    if show:
+        plt.plot(shifts, )
+        plt.xlabel('frame')
+        plt.ylabel('drift(pix)')
+        plt.legend(['x', 'y'])
+        plt.show()
+
     return image_stack, shifts
 
 
@@ -334,7 +337,7 @@ if __name__ == '__main__':
     # filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.ims'
 
     if True:
-        roi_width = 150
+        roi_width = 512
         header = read_header(filename)
         # print(header['colors'])
         # header['colors'] = ['561', '488', '637'] # overrule header
@@ -344,9 +347,9 @@ if __name__ == '__main__':
         image_stack = stack_cut_roi(image_stack, roi_width=roi_width)
         # image_stack = image_stack[::5, ]
         image_stack = filter_image_stack(image_stack)
-        # image_stack, drift = correct_drift(image_stack, sub_pixel=True, persistence=0.95)
+        image_stack, drift = correct_drift(image_stack, sub_pixel=True, persistence=0.95, show=True)
 
-        radius = 250 / header['nm_pix']
+        radius = 125 / header['nm_pix']
         selection_image = np.zeros_like(image_stack[0, 0, 0, :, :]).astype(float)
         for color in ['637']:
             selection_image += np.percentile(image_stack[:10, header['colors'].index(color), 0, :, :], 80, axis=0)
@@ -356,11 +359,10 @@ if __name__ == '__main__':
         save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
 
         traces = get_traces(image_stack, peaks, radius, header)
-        # for d in drift.columns[::-1]:
-        #     traces.insert(0, f'Drift_{d.replace("pix", "um")}', drift[d].values *header['nm_pix'])
+        for d in drift.columns[::-1]:
+            traces.insert(0, f'Drift_{d.replace("pix", "nm")}', drift[d].values *header['nm_pix'])
 
         save_traces(filename.replace('.ims', '.csv'), traces)
-        # save_traces(filename.replace('.ims', '_traces.mp4'), traces)
-        save_traces(r'c:\tmp\test.mp4', traces)
+        save_traces(filename.replace('.ims', '_traces.mp4'), traces)
     else:
         test_drift()
