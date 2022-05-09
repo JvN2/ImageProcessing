@@ -145,7 +145,7 @@ def scale_u8(array, z_range=None):
     if z_range is None:
         z_range = np.asarray([np.percentile(array, 5), 1.5 * np.percentile(array, 95)])
 
-    return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 0, 255))
+    return np.uint8(np.clip((255 * (array - z_range[0]) / (z_range[1] - z_range[0])), 1, 255))
 
 
 def stacks_to_movie(filename, df, tile, max_intensity_range=None, transmission_range=None, fps=5, merge_transmission = 1):

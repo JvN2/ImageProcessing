@@ -130,25 +130,23 @@ def stack_cut_roi(image_stack, roi_width, center=None):
     return image_stack
 
 
-def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, radius=10, color_ranges=None, fps=2):
-    if frames is None:
-        frames = range(image_stack.shape[0])
+def save_image_stack(filename, image_stack, channels, peaks=None, radius=10, color_ranges=None, fps=2, slice = 0):
     im_rgb = np.zeros([3, image_stack.shape[-2], image_stack.shape[-1]])
-    image_colors = {'637': 0, '561': 1, '488': 2}
+    # image_colors = {'637': 0, '561': 1, '488': 2}
 
     ims = []
 
     if color_ranges is None:
         color_ranges = []
-        for color, _ in enumerate(channels):
-            std = get_background(image_stack[0, color, 0, :, :])
+        for rgb, _ in enumerate(channels):
+            std = get_background(image_stack[0, rgb, 0, :, :])
             color_ranges.append([-std, 20 * std])
 
-    for frame in frames:
-        for color, (channel, color_range) in enumerate(zip(channels, color_ranges)):
-            image = image_stack[frame, color, 0, :, :]
 
-            im_rgb[image_colors[channel]] = scale_u8(image, color_range)
+    for frame, im in enumerate(image_stack):
+        for rgb, channel in enumerate(channels):
+            image = scale_u8(im[channel, slice,], color_ranges[rgb])
+            im_rgb[rgb] = image
         im = merge_rgb_images(im_rgb[0] * 0, im_rgb[0], im_rgb[1], im_rgb[2])
 
         if peaks is not None:
@@ -159,7 +157,7 @@ def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, r
                     bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
                     draw.ellipse(bbox, fill=None, outline='white')
                     bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
-                    if frame == frames[0]:
+                    if frame == 0:
                         draw.text(bbox, str(i), color='white')
 
             draw.text([10, 10], f'Frame {frame}', color='white')
@@ -180,9 +178,10 @@ def save_movie(filename, ims, fps):
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
     elif ext in codec.keys():
         shape = np.array(ims[0]).shape[:2][::-1]
+        print(shape)
         out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, shape)
         for im in tqdm(ims, f'Saving {filename}'):
-            out.write(cv2.cvtColor(np.array(im).astype(np.float32), cv2.COLOR_RGB2BGR))
+            out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         out.release()
     else:
         print('Filetype {ext} not supported.')
@@ -339,8 +338,10 @@ if __name__ == '__main__':
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
     # filename = r'C:\Users\noort\Downloads\Slide1_Chan2_FOV1_512_Exp50o50r_pr%40o70r_Rep100_Int120_T+P+P_2022-04-22_Protocol 5_15.08.02.ims'
 
+
     if True:
         roi_width = 512
+        drift_correction = False
         header = read_header(filename)
         # print(header['colors'])
         # header['colors'] = ['561', '488', '637'] # overrule header
@@ -350,7 +351,8 @@ if __name__ == '__main__':
         image_stack = stack_cut_roi(image_stack, roi_width=roi_width)
         # image_stack = image_stack[::5, ]
         image_stack = filter_image_stack(image_stack)
-        image_stack, drift = correct_drift(image_stack, sub_pixel=True, persistence=0.95, show=True)
+        if drift_correction:
+            image_stack, drift = correct_drift(image_stack, sub_pixel=True, persistence=0.95, show=True)
 
         radius = 125 / header['nm_pix']
         selection_image = np.zeros_like(image_stack[0, 0, 0, :, :]).astype(float)
@@ -360,6 +362,7 @@ if __name__ == '__main__':
 
         peaks = find_peaks(selection_image, radius * 4, treshold_sd=3.5)
         save_image_stack(filename.replace('.ims', '.mp4'), image_stack, header['colors'], peaks=peaks, radius=radius)
+        breakpoint()
 
         traces = get_traces(image_stack, peaks, radius, header)
         for d in drift.columns[::-1]:
