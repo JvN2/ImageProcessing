@@ -147,21 +147,23 @@ def save_image_stack(filename, image_stack, channels, frames=None, peaks=None, r
     for frame in frames:
         for color, (channel, color_range) in enumerate(zip(channels, color_ranges)):
             image = image_stack[frame, color, 0, :, :]
+
             im_rgb[image_colors[channel]] = scale_u8(image, color_range)
         im = merge_rgb_images(im_rgb[0] * 0, im_rgb[0], im_rgb[1], im_rgb[2])
 
-        draw = ImageDraw.Draw(im)
         if peaks is not None:
+            draw = ImageDraw.Draw(im)
+            if peaks is not None:
 
-            for i, coord in enumerate(peaks):
-                bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
-                draw.ellipse(bbox, fill=None, outline='white')
-                bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
-                if frame == frames[0]:
-                    draw.text(bbox, str(i), color='white')
+                for i, coord in enumerate(peaks):
+                    bbox = (coord[0] - radius, coord[1] - radius, coord[0] + radius, coord[1] + radius)
+                    draw.ellipse(bbox, fill=None, outline='white')
+                    bbox = list(np.clip(coord + radius / np.sqrt(2), 0, np.shape(image_stack)[-1]))
+                    if frame == frames[0]:
+                        draw.text(bbox, str(i), color='white')
 
-        draw.text([10, 10], f'Frame {frame}', color='white')
-        del draw
+            draw.text([10, 10], f'Frame {frame}', color='white')
+            del draw
 
         ims.append(im)
     save_movie(filename, ims, fps)
@@ -177,9 +179,10 @@ def save_movie(filename, ims, fps):
     elif ext == 'gif':
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
     elif ext in codec.keys():
-        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, np.array(ims[0]).shape[:2][::-1])
-        for im in ims:
-            out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
+        shape = np.array(ims[0]).shape[:2][::-1]
+        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, shape)
+        for im in tqdm(ims, f'Saving {filename}'):
+            out.write(cv2.cvtColor(np.array(im).astype(np.float32), cv2.COLOR_RGB2BGR))
         out.release()
     else:
         print('Filetype {ext} not supported.')
