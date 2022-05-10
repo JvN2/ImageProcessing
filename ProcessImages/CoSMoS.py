@@ -65,9 +65,9 @@ def filter_image(image, highpass=None, lowpass=None):
     r = (x ** 2 + y ** 2) ** 0.5
     filter = np.ones_like(image).astype(float)
 
-    if highpass is not None:
+    if (highpass is not None) and (highpass > 0):
         filter *= 1 / (1 + 2 ** (6 * (size / highpass - r)))  # Butterworth filter
-    if lowpass is not None:
+    if (lowpass is not None) and (lowpass > 0):
         filter *= np.exp(-(r / (2 * size / lowpass)) ** 2)  # Gaussian filter
 
     im_fft = fftpack.fft2(image)
@@ -76,6 +76,9 @@ def filter_image(image, highpass=None, lowpass=None):
 
     im_fft = fftpack.fftshift(im_fft)
     image = np.real(fftpack.ifft2(im_fft)).astype(float)
+
+    if highpass ==0:
+        image -= np.percentile(image, 25)
 
     return image
 
@@ -178,7 +181,6 @@ def save_movie(filename, ims, fps):
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
     elif ext in codec.keys():
         shape = np.array(ims[0]).shape[:2][::-1]
-        print(shape)
         out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, shape)
         for im in tqdm(ims, f'Saving {filename}'):
             out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
