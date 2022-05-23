@@ -116,25 +116,43 @@ class TraceExtraction():
     def __init__(self):
         self.coords = []
         self.radius = 10
-        self.masks = None
-        self.df = pd.DataFrame()
-        self.frame_nr = -1
+        self.mask = None
+        self.traces = []
         return
 
-    def set_coords(self, coords, shape, radius=None):
+    def set_coords(self, coords, radius=None):
         if radius is not None:
             self.radius = radius
-        self.masks = [create_circular_mask(radius, shape, c) for c in coords]
+        self.coords = coords
+        self.mask = create_circular_mask(int(self.radius * 2))
 
-    def get_intensities(self, image, coords=None, radius=None, label=''):
-        self.frame_nr += 1
+    def extract_intensities(self, image, coords=None, radius=None, label=''):
         if coords is not None:
-            self.set_coords(coords, np.shape(image), radius)
+            self.set_coords(coords, radius)
+        size = np.shape(self.mask)[0]
+        # if self.frame_nr == 0:
+        #     plt.imshow(self.mask)
+        #     plt.show()
+        #     plt.imshow(get_roi(image, self.coords[0], size))
+        #     plt.show()
 
-        intensities = {f'{i}: I {label} (a.u.)' : np.sum(m*image) for i, m in enumerate(self.masks)}
-        self.df = self.df.append(pd.Series(intensities, name= self.frame_nr))
-
+        intensities = {f'{i}: I {label} (a.u.)': np.sum(get_roi(image, c, size) * self.mask) for i, c in
+                       enumerate(self.coords)}
+        # for i in intensities.keys():
+        #     print(i, intensities[i])
+        # self.df = self.df.join(pd.Series(intensities, name=self.frame_nr))
+        print(pd.Series(intensities, name=self.frame_nr))
+        print(pd.Series(intensities, name=self.frame_nr).to_frame())
+        self.df = self.df.merge(pd.Series(intensities, name=self.frame_nr).to_frame(), left_index = True, right_index = True)
         return self.df
+
+
+def set_roi(image_array, center, roi):
+    width = len(roi[0])
+    start = (np.asarray(center) - width // 2).astype(int)
+    image_array[start[0]: start[0] + width,
+    start[1]: start[1] + width] = roi  # invert axis for numpy array of image
+    return
 
 
 def scale_u8(image, intensity_range=None):
@@ -182,9 +200,10 @@ def get_drift(image, ref_image, sub_pixel=True):
     return shift
 
 
-def get_roi(image_array, pos, width):
-    bottom_left = np.asarray(pos) - width // 2
-    roi = image_array[bottom_left[0]:bottom_left[0] + width, bottom_left[1]:bottom_left[1] + width]
+def get_roi(image, center, width):
+    start = (np.asarray(center) - width // 2)
+    start = list(np.clip(start, np.zeros(2), np.shape(image) - np.asarray(width)).astype(np.uint16))
+    roi = image[start[0]: start[0] + width, start[1]: start[1] + width]  # invert axis for numpy array of image
     return roi
 
 
