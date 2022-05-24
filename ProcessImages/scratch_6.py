@@ -1,23 +1,15 @@
-from PIL import Image
 import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
+import pandas as pd
 
-def read_tiff(path):
-    """
-    path - Path to the multipage-tiff file
-    """
-    img = Image.open(path)
-    images = []
-    for i in range(img.n_frames):
-        img.seek(i)
-        images.append(np.array(img))
-    return np.array(images)
 
-filename = Path(r'C:\Users\noort\Downloads\20nmStack_2021-03-30-191748-0000.tif')
-
-res = read_tiff(filename)
-print(np.shape(res))
-res = np.reshape(res,(768,1024,3))
-plt.imshow(res[:,:,2]-res[:,:,0])
-plt.show()
+# arr = np.linspace(0, 10, 5)
+# df = pd.DataFrame(arr.tolist(), columns=['test'])
+# df = pd.DataFrame()
+# # df = df.merge(df, pd.DataFrame(arr))
+# # df['test_i2'] = np.random.random_integers(0,10, 10)
+# df.at[:,'test4'] =arr
+# print(df)
+column_names = ['test', 'ttry']
+column_names += [f'{i:.0f}: test' for i in np.linspace(0, 300, 50)]
+print(column_names)
+# print(sorted(column_names, key=lambda x: int(x[:x.index(':')])))

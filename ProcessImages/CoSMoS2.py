@@ -6,8 +6,13 @@ import pandas as pd
 from imaris_ims_file_reader.ims import ims
 from scipy import ndimage
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 import ProcessImages.ImageIO3 as im3
+import ProcessImages.trace_analysis as ta
+
+import warnings
+warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 
 def ims_read_header(filename):
@@ -41,6 +46,8 @@ def ims_read_header(filename):
 if __name__ == '__main__':
     # open data file and df
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
+
+    filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
     image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0)
     header, df = ims_read_header(filename)
 
@@ -49,7 +56,7 @@ if __name__ == '__main__':
     except FileNotFoundError:
         # Correct drift
         drift = im3.DriftCorrection()
-        for i in tqdm(df.index, 'Drift correction'):
+        for i in tqdm(df.index, postfix='Drift correction'):
             rgb_image = [im3.filter_image(image_stack[i, header['colors'].index(c)], highpass=0) for c in
                          header['colors']]
             drift.calc_drift(np.sum(rgb_image, axis=0), persistence=0.5)
@@ -66,18 +73,26 @@ if __name__ == '__main__':
 
     # get traces
     traces = im3.TraceExtraction()
-    traces.set_coords(peaks, radius)
-    for i, s in enumerate(tqdm(shift, postfix='Extract traces')):
+    traces.set_coords(peaks, len(df['Time (s)']), radius)
+    for i, _ in enumerate(tqdm(df['Time (s)'], postfix='Extract traces')):
         for label in ['561', '637']:
             image = im3.filter_image(image_stack[i, header['colors'].index(label)], highpass=0)
-            traces.extract_intensities(image, label=label)
-    traces.df.to_csv(filename.replace('.ims', '_traces.csv'))
-    # df = pd.concat([df, traces.df], axis=1, join='outer')
+
+            traces.extract_intensities(image, i, label=label)
+    try:
+        df = df.join(traces.df)
+    except ValueError:
+        df.update(traces.df)
+
+    # sort and save traces
+    ta.save_traces(df, filename.replace('.ims', '.csv'))
+
+    # Hidden Markov analysis
 
     # save movie
     shift = np.asarray([df['Drift x (nm)'], df['Drift y (nm)']]).T / header['nm_pix']
     movie = im3.Movie()
-    with movie(filename.replace('.ims', '_test.mp4'), 4):
+    with movie(filename.replace('.ims', '.mp4'), 4):
         movie.set_range(red=[0, 30], green=[0, 30])
         movie.set_circles(peaks, radius)
         for i, s in enumerate(tqdm(shift, postfix='Add frames to movie')):

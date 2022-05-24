@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import fftpack, ndimage
 from scipy.optimize import curve_fit
 from uncertainties import ufloat
+from tqdm import tqdm
 
 
 class Movie():
@@ -120,30 +121,24 @@ class TraceExtraction():
         self.traces = []
         return
 
-    def set_coords(self, coords, radius=None):
+    def set_coords(self, coords, n_frames, radius=None):
         if radius is not None:
             self.radius = radius
         self.coords = coords
         self.mask = create_circular_mask(int(self.radius * 2))
+        self.df = pd.DataFrame(index=range(n_frames))
 
-    def extract_intensities(self, image, coords=None, radius=None, label=''):
+    def extract_intensities(self, image, frame_nr, coords=None, radius=None, label=''):
         if coords is not None:
             self.set_coords(coords, radius)
         size = np.shape(self.mask)[0]
-        # if self.frame_nr == 0:
-        #     plt.imshow(self.mask)
-        #     plt.show()
-        #     plt.imshow(get_roi(image, self.coords[0], size))
-        #     plt.show()
 
-        intensities = {f'{i}: I {label} (a.u.)': np.sum(get_roi(image, c, size) * self.mask) for i, c in
-                       enumerate(self.coords)}
-        # for i in intensities.keys():
-        #     print(i, intensities[i])
-        # self.df = self.df.join(pd.Series(intensities, name=self.frame_nr))
-        print(pd.Series(intensities, name=self.frame_nr))
-        print(pd.Series(intensities, name=self.frame_nr).to_frame())
-        self.df = self.df.merge(pd.Series(intensities, name=self.frame_nr).to_frame(), left_index = True, right_index = True)
+        col_names = [f'{i}: I {label} (a.u.)' for i, _ in enumerate(self.coords)]
+        pd.concat([self.df, pd.DataFrame(columns=col_names)])
+
+        for i, c in  enumerate(self.coords):
+            self.df.at[frame_nr, f'{i}: I {label} (a.u.)'] = np.sum(get_roi(image, c, size) * self.mask)
+
         return self.df
 
 
@@ -196,15 +191,13 @@ def get_drift(image, ref_image, sub_pixel=True):
     if sub_pixel:
         _, offset = fit_peak(get_roi(shift_image, max, 10))
         max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
-    shift = max - np.asarray(np.shape(shift_image)) / 2.0
-    return shift
+    return max - np.asarray(np.shape(shift_image)) / 2.0
 
 
 def get_roi(image, center, width):
     start = (np.asarray(center) - width // 2)
     start = list(np.clip(start, np.zeros(2), np.shape(image) - np.asarray(width)).astype(np.uint16))
-    roi = image[start[0]: start[0] + width, start[1]: start[1] + width]  # invert axis for numpy array of image
-    return roi
+    return image[start[0]: start[0] + width, start[1]: start[1] + width]
 
 
 def fit_peak(Z, show=False, center=[0, 0]):
@@ -254,8 +247,7 @@ def create_circular_mask(width, size=None, center=None, steepness=3):
     x = np.outer(np.linspace(0, size[0] - 1, size[0]), np.ones(size[1]))
     y = np.outer(np.ones(size[0]), np.linspace(0, size[1] - 1, size[1]))
     r = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
-    mask = 1 - 1 / (1 + np.exp(-(r - width / 2) * steepness))
-    return mask
+    return 1 - 1 / (1 + np.exp(-(r - width / 2) * steepness))
 
 
 def find_peaks(image, radius=20, treshold_sd=3, n_traces=2000):
@@ -263,11 +255,14 @@ def find_peaks(image, radius=20, treshold_sd=3, n_traces=2000):
     median = np.median(image)
     treshold = np.median(image) + treshold_sd * np.std(image)
     peaks = []
-    while max > treshold and len(peaks) < n_traces:
+    for _ in tqdm(range(n_traces), postfix='Find peaks'):
+    # while max > treshold and len(peaks) < n_traces:
         max_index = np.asarray(np.unravel_index(np.argmax(image, axis=None), image.shape))
         mask = create_circular_mask(radius, np.shape(image), max_index)
         image = mask * median + (1 - mask) * image
         max = np.max(image)
+        if max < treshold:
+            break
         peaks.append(np.flip(max_index))
     peaks = np.asarray(peaks)
     if peaks.any():

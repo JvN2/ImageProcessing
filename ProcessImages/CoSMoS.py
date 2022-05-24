@@ -98,24 +98,28 @@ def filter_image_stack(image_stack, highpass=None, lowpass=None, offset=True):
 def get_background(image):
     background = image[image < 0]
     background = np.random.choice([-1, 1], len(background))
-    std = np.std(background)
-    return std
+    return np.std(background)
 
 
 def get_traces(image_stack, coords, radius, header):
     all_traces = []
     shape = np.shape(image_stack)
     shape = (shape[0], shape[-2], shape[-1])
-    for i, c in enumerate(tqdm(coords, 'Getting traces')):
+    for c in tqdm(coords, 'Getting traces'):
         mask = create_circular_mask(radius * 2, size=shape[-2:], center=c).T
-        traces = []
-        for c in range(np.shape(image_stack)[1]):
-            traces.append([np.sum(image * mask) for image in np.reshape(image_stack[:, c, :, :, :], shape)])
+        traces = [
+            [
+                np.sum(image * mask)
+                for image in np.reshape(image_stack[:, c, :, :, :], shape)
+            ]
+            for c in range(np.shape(image_stack)[1])
+        ]
+
         all_traces.append(traces)
 
     column_names = []
     for trace_nr, trace in enumerate(all_traces):
-        for i, channel in enumerate(header['colors']):
+        for channel in header['colors']:
             column_names.append(f'{trace_nr}: I{channel}nm (a.u.)')
 
     df = pd.DataFrame(np.reshape(all_traces, (-1, np.shape(traces)[-1])).T, columns=column_names)
@@ -181,7 +185,7 @@ def save_movie(filename, ims, fps):
             im.save(filename.replace('.jpg', f'_{frame}.jpg'))
     elif ext == 'gif':
         ims[0].save(filename, save_all=True, append_images=ims, duration=1000 / fps, loop=0)
-    elif ext in codec.keys():
+    elif ext in codec:
         shape = np.array(ims[0]).shape[:2][::-1]
         out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*codec[ext]), fps, shape)
         for im in tqdm(ims, f'Saving {filename}'):
@@ -192,8 +196,8 @@ def save_movie(filename, ims, fps):
 
 
 def save_traces(filename, traces):
-    trace_nrs = list(set([t.split(': ')[0] for t in traces.columns if ': ' in t]))
-    colors = list(set([t.split(': I')[1][:3] for t in traces.columns if ': I' in t]))
+    trace_nrs = list({t.split(': ')[0] for t in traces.columns if ': ' in t})
+    colors = list({t.split(': I')[1][:3] for t in traces.columns if ': I' in t})
 
     ext = filename[-3:]
     if ext in ['mp4', 'jpg']:
@@ -239,10 +243,27 @@ def read_header(filename):
                     hdf[rf'DataSetInfo/Channel {channel}'].attrs['LSMExcitationWavelength'][:3].tobytes().decode())
             except KeyError:
                 header['colors'] = channels
-        header['nm_pix'] = 1000 * np.abs(float(hdf[rf'DataSetInfo/Image'].attrs['ExtMax0'].tobytes().decode()) \
-                                         - float(hdf[rf'DataSetInfo/Image'].attrs['ExtMin0'].tobytes().decode())) / \
-                           float(hdf[rf'DataSetInfo/Image'].attrs['X'].tobytes().decode())
-        header['time'] = [t[1] / 1e10 for t in np.asarray(hdf[rf'DataSetTimes/Time'])]
+        header['nm_pix'] = (
+            1000
+            * np.abs(
+                (
+                    float(
+                        hdf['DataSetInfo/Image']
+                        .attrs['ExtMax0']
+                        .tobytes()
+                        .decode()
+                    )
+                    - float(
+                        hdf[rf'DataSetInfo/Image']
+                        .attrs['ExtMin0']
+                        .tobytes()
+                        .decode()
+                    )
+                )
+            )
+        ) / float(hdf['DataSetInfo/Image'].attrs['X'].tobytes().decode())
+
+        header['time'] = [t[1] / 1e10 for t in np.asarray(hdf['DataSetTimes/Time'])]
     return header
 
 
@@ -275,8 +296,7 @@ def get_drift(image, ref_image, sub_pixel=True):
     if sub_pixel:
         _, offset = fit_peak(get_roi(shift_image, max, 10))
         max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
-    shift = max - np.asarray(np.shape(shift_image)) / 2.0
-    return shift
+    return max - np.asarray(np.shape(shift_image)) / 2.0
 
 
 def generate_test_image(peaks, size=512, width=5):
