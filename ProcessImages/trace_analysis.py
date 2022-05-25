@@ -1,4 +1,5 @@
-import fnmatch, warnings
+import fnmatch
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,12 +9,16 @@ from tqdm import tqdm
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
+
 def save_traces(df, filename):
     columns = [name for name in df.columns if ':' in name]
     columns = sorted(columns, key=lambda x: int(x[:x.index(':')]))
     columns = [name for name in df.columns if ':' not in name] + columns
     df = df.reindex(columns, axis=1)
-    df.to_csv(filename, index=False)
+    if filename.split('.')[-1] == 'hdf':
+        df.to_hdf(filename, 'traces')
+    else:
+        df.to_csv(filename, index=False)
 
 
 def get_color(name):
@@ -23,6 +28,10 @@ def get_color(name):
         if key in name:
             color = colors[key]
     return color
+
+
+def get_label(name, sep=': '):
+    return int(name.split(sep)[0]) if sep in name else None
 
 
 def fitHMM(Q):
@@ -94,7 +103,7 @@ def analyze_traces(df):
     # if filename:
     #     save_movie(filename.replace('.csv', '_binding.mp4'), ims, 1)
 
-    save_traces(df, filename)
+    save_traces(df, filename.split('.')[0] + '.hdf')
 
     if False:
         traces = fnmatch.filter(df.columns, '15: * (a.u.)')
@@ -103,7 +112,7 @@ def analyze_traces(df):
                 plt.scatter(df['Time (s)'], df[trace], facecolors='none', edgecolors=get_color(trace))
             else:
                 plt.plot(df['Time (s)'], df[trace], color=get_color(trace))
-        plt.ylim((-50,100))
+        plt.ylim((-50, 100))
         plt.show()
 
 
@@ -122,4 +131,15 @@ if __name__ == '__main__':
     # # plt.semilogy()
     # plt.show()
 
-    analyze_traces(df)
+    # analyze_traces(df)
+
+    df = pd.read_hdf(filename.split('.')[0] + '.hdf', 'traces')
+    pars = pd.DataFrame()
+    colors = ['637', '561']
+    for color in colors:
+        traces = fnmatch.filter(df.columns, f'*: HM {color} (a.u.)')
+        for trace in traces:
+            pars.at[get_label(trace), f'I {color} (a.u.)'] = df[trace].max() - df[trace].min()
+        plt.hist(pars[f'I {color} (a.u.)'], color = get_color(color), range=(0,100), bins=100)
+    plt.show()
+    pars.to_hdf(filename.split('.')[0] + '.hdf', 'pars')
