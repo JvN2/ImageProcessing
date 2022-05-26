@@ -7,18 +7,41 @@ import pandas as pd
 from hmmlearn.hmm import GaussianHMM
 from tqdm import tqdm
 
+import ProcessImages.ImageIO as iio
+
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 
-def save_traces(df, filename):
-    columns = [name for name in df.columns if ':' in name]
-    columns = sorted(columns, key=lambda x: int(x[:x.index(':')]))
-    columns = [name for name in df.columns if ':' not in name] + columns
-    df = df.reindex(columns, axis=1)
-    if filename.split('.')[-1] == 'hdf':
-        df.to_hdf(filename, 'traces')
-    else:
-        df.to_csv(filename, index=False)
+def save_hdf(filename, traces=None, pars=None, globs=None):
+    filename = filename[:-4] + '.hdf'
+    if traces is not None:
+        columns = [name for name in traces.columns if ':' in name]
+        columns = sorted(columns, key=lambda x: int(x[:x.index(':')]))
+        columns = [name for name in traces.columns if ':' not in name] + columns
+        traces = traces.reindex(columns, axis=1)
+        traces.to_hdf(filename, 'traces')
+    if pars is not None:
+        pars.to_hdf(filename, 'parameters')
+    if globs is not None:
+        pd.Series(globs).to_hdf(filename, 'globals')
+
+    with pd.ExcelWriter(filename.replace('hdf', 'xlsx')) as writer:
+        if traces is not None:
+            traces.to_excel(writer, sheet_name='traces', index=False)
+        if pars is not None:
+            pars.to_excel(writer, sheet_name='parameters')
+        if globs is not None:
+            pd.Series(globs).to_excel(writer, sheet_name='globals')
+
+    return filename
+
+
+def read_hdf(filename):
+    filename = filename[:-4] + '.hdf'
+    traces = pd.read_hdf(filename, key='traces')
+    pars = pd.read_hdf(filename, key='parameters')
+    globs = dict(pd.read_hdf(filename, 'globals'))
+    return traces, pars, globs
 
 
 def get_color(name):
@@ -63,83 +86,63 @@ def fitHMM(Q):
     return hidden_states, mus, sigmas, P, logProb, samples
 
 
-def analyze_traces(df):
+def analyze_traces(df, treshold = None):
     time = df['Time (s)'].values
     dt = np.median(np.diff(time))
 
     traces = fnmatch.filter(df.columns, '*: I * (a.u.)')
 
     for trace in tqdm(traces, postfix='Fit HMM'):
-        # fig = plt.figure()
-        # plt.gcf().canvas.get_renderer()
         intensity = df[trace].values
-        # plt.scatter(time, intensity, color="none", edgecolor="green")
-        # comment = ''
         try:
             states, mus, sigmas, P, logProb, samples = fitHMM(intensity)
+            if treshold is not None:
+                    if mus[1] < treshold:
+                        states *= 0
+                        mus[0] = np.median(intensity)
+                        # comment = ', No binding'
+                    else:
+                        tau_on = np.min([dt / P[1, 0], time[-1]])
+                        tau_off = np.min([dt / P[0, 1], time[-1]])
+                        # comment = f', tau_on = {tau_on:.1f} s, tau_off = {tau_off:.1f} s'
             df[trace.replace(' I ', ' HM ')] = mus[1] * states + mus[0] * (1 - states)
-            if mus[1] < 25:
-                states *= 0
-                mus[0] = np.median(intensity)
-                # comment = ', No binding'
-            else:
-                tau_on = np.min([dt / P[1, 0], time[-1]])
-                tau_off = np.min([dt / P[0, 1], time[-1]])
-                # comment = f', tau_on = {tau_on:.1f} s, tau_off = {tau_off:.1f} s'
-            # plt.plot(time, mus[1] * states + mus[0] * (1 - states), color="green")
         except ValueError:
             pass
-
-    #     plt.title(f'{trace}{comment}')
-    #     plt.ylim(-50, 500)
-    #     plt.xlabel('Time (s)')
-    #     plt.ylabel('Intensity (a.u.)')
-    #     plt.show()
-    #     if filename:
-    #         img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    #         img = np.reshape(img, fig.canvas.get_width_height()[::-1] + (3,))
-    #         ims.append(img)
-    #
-    # if filename:
-    #     save_movie(filename.replace('.csv', '_binding.mp4'), ims, 1)
-
-    save_traces(df, filename.split('.')[0] + '.hdf')
-
-    if False:
-        traces = fnmatch.filter(df.columns, '15: * (a.u.)')
-        for trace in traces:
-            if ' I ' in trace:
-                plt.scatter(df['Time (s)'], df[trace], facecolors='none', edgecolors=get_color(trace))
-            else:
-                plt.plot(df['Time (s)'], df[trace], color=get_color(trace))
-        plt.ylim((-50, 100))
-        plt.show()
+    return df
 
 
 if __name__ == '__main__':
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.csv'
-    df = pd.read_csv(filename)
-    # columns = [name for name in df.columns if 'I 637' in name]
-    # for c in columns:
-    #     hist, edges = np.histogram(df[c],bins = 100, range=(-50, 100))
-    #     try:
-    #         histogram += hist
-    #     except NameError:
-    #         histogram = hist
-    #
-    # plt.plot(edges[1:], histogram)
-    # # plt.semilogy()
-    # plt.show()
+    # filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
 
-    # analyze_traces(df)
+    traces = analyze_traces(read_hdf(filename)[0], 100)
+    save_hdf(filename, traces=traces)
 
-    df = pd.read_hdf(filename.split('.')[0] + '.hdf', 'traces')
-    pars = pd.DataFrame()
-    colors = ['637', '561']
-    for color in colors:
-        traces = fnmatch.filter(df.columns, f'*: HM {color} (a.u.)')
-        for trace in traces:
-            pars.at[get_label(trace), f'I {color} (a.u.)'] = df[trace].max() - df[trace].min()
-        plt.hist(pars[f'I {color} (a.u.)'], color = get_color(color), range=(0,100), bins=100)
+    traces, pars, globs = read_hdf(filename)
+    save_hdf(filename, traces=traces, pars=pars, globs=globs)
+    for color in globs['Colors'][::-1]:
+        selected_traces = fnmatch.filter(traces.columns, f'*: HM {color} (a.u.)')
+        for trace in selected_traces:
+            pars.at[get_label(trace), f'I {color} (a.u.)'] = traces[trace].max() - traces[trace].min()
+        plt.hist(pars[f'I {color} (a.u.)'], color=get_color(color), range=(-50, 200), bins=50)
     plt.show()
-    pars.to_hdf(filename.split('.')[0] + '.hdf', 'pars')
+
+    movie = iio.Movie()
+    with movie(filename[:-4] + '_traces.mp4', 2):
+        for label in tqdm(pars.index, postfix='Save plots'):
+            for color in globs['Colors']:
+                offset = np.min(traces[f'{label}: HM {color} (a.u.)'])
+                plt.scatter(traces['Time (s)'], traces[f'{label}: I {color} (a.u.)'] - offset, facecolors='none',
+                            edgecolors=get_color(color),s =40)
+                plt.plot(traces['Time (s)'], traces[f'{label}: HM {color} (a.u.)'] - offset, color=get_color(color),
+                         label=color)
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Intensity (a.u.)')
+            plt.ylim((-100, 350))
+            plt.title(f'trace {label}')
+            try:
+                movie.add_plot()
+            except Exception as inst:
+                print(inst)
+

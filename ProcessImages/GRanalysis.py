@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-import ProcessImages.ImageIO3 as im3
+import ProcessImages.ImageIO as im3
 
 if __name__ == "__main__":
     filename = r'\\data02\pi-vannoort\Noort\Data\Alex GR\data_004\data_004.dat'
