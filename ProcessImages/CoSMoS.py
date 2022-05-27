@@ -44,10 +44,10 @@ def ims_read_header(filename):
 if __name__ == '__main__':
     # open data file
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
-
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
     # filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
-    image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0)
+    image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0, )
+
     globs, traces = ims_read_header(filename)
 
     highpass = 100
@@ -94,13 +94,13 @@ if __name__ == '__main__':
     shift = np.asarray([traces['Drift x (nm)'], traces['Drift y (nm)']]).T / globs['Pixel (nm)']
     movie = iio.Movie()
     with movie(filename.replace('.ims', '.mp4'), 4):
-        movie.set_range(red=[0, 30], green=[0, 30])
+        movie.set_range(red=[0, 30], green=[0, 30], blue=[0, 30])
         movie.set_circles(np.asarray(peaks), globs['Radius (nm)'] / globs['Pixel (nm)'])
         for frame, s in enumerate(tqdm(shift, postfix='Add frames to movie')):
             label = f'T = {timedelta(seconds=int(traces["Time (s)"][frame]))}'
             rgb_image = [
-                iio.filter_image(image_stack[frame, ['637', '561', '488'].index(c)], highpass=highpass, lowpass=lowpass)
-                for c in
-                globs['Colors']]
+                iio.filter_image(image_stack[frame, globs['Colors'].index(c)], highpass=highpass, lowpass=lowpass)
+                for c in globs['Colors']]
             rgb_image = ndimage.shift(rgb_image, [0, s[0], s[1]])
-            movie.add_frame(red=rgb_image[0], green=rgb_image[1], label=label)
+            movie.add_frame(red=rgb_image[globs['Colors'].index('637')], green=rgb_image[globs['Colors'].index('561')],
+                            blue=rgb_image[globs['Colors'].index('488')], label=label)

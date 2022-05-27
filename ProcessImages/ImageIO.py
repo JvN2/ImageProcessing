@@ -150,7 +150,7 @@ class TraceExtraction():
         pd.concat([self.df, pd.DataFrame(columns=col_names)])
 
         for i, c in enumerate(self.coords):
-            self.df.at[frame_nr, f'{i}: I {label} (a.u.)'] = np.sum(get_roi(image, c, size) * self.mask)
+            self.df.at[frame_nr, f'{i}: I {label} (a.u.)'] = np.sum(get_roi(image, c[::-1], size) * self.mask)
 
         return self.df
 

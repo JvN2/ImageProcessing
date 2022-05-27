@@ -45,7 +45,7 @@ def read_hdf(filename):
 
 
 def get_color(name):
-    colors = {'561': 'green', '637': 'red'}
+    colors = {'561': 'green', '637': 'red', '488': 'blue'}
     color = None
     for key in colors:
         if key in name:
@@ -86,28 +86,28 @@ def fitHMM(Q):
     return hidden_states, mus, sigmas, P, logProb, samples
 
 
-def analyze_traces(df, treshold = None):
+def analyze_traces(df, treshold=None):
     time = df['Time (s)'].values
     dt = np.median(np.diff(time))
 
     traces = fnmatch.filter(df.columns, '*: I * (a.u.)')
-
     for trace in tqdm(traces, postfix='Fit HMM'):
         intensity = df[trace].values
         try:
             states, mus, sigmas, P, logProb, samples = fitHMM(intensity)
             if treshold is not None:
-                    if mus[1] < treshold:
-                        states *= 0
-                        mus[0] = np.median(intensity)
-                        # comment = ', No binding'
-                    else:
-                        tau_on = np.min([dt / P[1, 0], time[-1]])
-                        tau_off = np.min([dt / P[0, 1], time[-1]])
-                        # comment = f', tau_on = {tau_on:.1f} s, tau_off = {tau_off:.1f} s'
-            df[trace.replace(' I ', ' HM ')] = mus[1] * states + mus[0] * (1 - states)
+                if (mus[1] - mus[0]) < treshold:
+                    states *= 0
+                    mus[0] = np.median(intensity)
+                    # comment = ', No binding'
+                else:
+                    tau_on = np.min([dt / P[1, 0], time[-1]])
+                    tau_off = np.min([dt / P[0, 1], time[-1]])
+                    # comment = f', tau_on = {tau_on:.1f} s, tau_off = {tau_off:.1f} s'
         except ValueError:
-            pass
+            mus[0] = np.median(intensity)
+            states = intensity * 0
+        df[trace.replace(' I ', ' HM ')] = mus[1] * states + mus[0] * (1 - states)
     return df
 
 
@@ -119,30 +119,30 @@ if __name__ == '__main__':
     save_hdf(filename, traces=traces)
 
     traces, pars, globs = read_hdf(filename)
-    save_hdf(filename, traces=traces, pars=pars, globs=globs)
-    for color in globs['Colors'][::-1]:
-        selected_traces = fnmatch.filter(traces.columns, f'*: HM {color} (a.u.)')
-        for trace in selected_traces:
-            pars.at[get_label(trace), f'I {color} (a.u.)'] = traces[trace].max() - traces[trace].min()
-        plt.hist(pars[f'I {color} (a.u.)'], color=get_color(color), range=(-50, 200), bins=50)
-    plt.show()
+    # save_hdf(filename, traces=traces, pars=pars, globs=globs)
+    # for color in globs['Colors']:
+    #     selected_traces = fnmatch.filter(traces.columns, f'*: HM {color} (a.u.)')
+    #     for trace in selected_traces:
+    #         pars.at[get_label(trace), f'I {color} (a.u.)'] = traces[trace].max() - traces[trace].min()
+    #     plt.hist(pars[f'I {color} (a.u.)'], color=get_color(color), range=(-100, 500), bins=100)
+    # plt.show()
+
 
     movie = iio.Movie()
     with movie(filename[:-4] + '_traces.mp4', 2):
         for label in tqdm(pars.index, postfix='Save plots'):
             for color in globs['Colors']:
-                offset = np.min(traces[f'{label}: HM {color} (a.u.)'])
-                plt.scatter(traces['Time (s)'], traces[f'{label}: I {color} (a.u.)'] - offset, facecolors='none',
-                            edgecolors=get_color(color),s =40)
+                offset = traces[f'{label}: HM {color} (a.u.)'].min()
+                plt.scatter(traces['Time (s)'], traces[f'{label}: I {color} (a.u.)'] - offset,
+                            edgecolors=get_color(color), s=40, facecolors='none')
                 plt.plot(traces['Time (s)'], traces[f'{label}: HM {color} (a.u.)'] - offset, color=get_color(color),
                          label=color)
             plt.legend()
             plt.xlabel('Time (s)')
             plt.ylabel('Intensity (a.u.)')
-            plt.ylim((-100, 350))
+            plt.ylim((-100, 900))
             plt.title(f'trace {label}')
             try:
                 movie.add_plot()
             except Exception as inst:
                 print(inst)
-
