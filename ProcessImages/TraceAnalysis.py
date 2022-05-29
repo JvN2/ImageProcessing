@@ -31,9 +31,9 @@ class Traces():
         except ValueError:
             self.traces = pd.DataFrame()
         except FileNotFoundError:
-            self.traces=pd.DataFrame()
-            self.pars=pd.DataFrame()
-            self.globs=pd.DataFrame().squeeze()
+            self.traces = pd.DataFrame()
+            self.pars = pd.DataFrame()
+            self.globs = pd.DataFrame().squeeze()
             return
         try:
             self.pars = pd.read_excel(self.filename, 'parameters', index_col=0)
@@ -52,7 +52,6 @@ class Traces():
             self.globs = pd.DataFrame()
         return
 
-
     def to_file(self, filename=None):
         if filename is not None:
             self.filename = Path(filename).with_suffix('.xlsx')
@@ -64,38 +63,6 @@ class Traces():
             if not self.globs.empty:
                 self.globs.to_excel(writer, sheet_name='globals')
         return
-
-
-def save_hdf(filename, traces=None, pars=None, globs=None):
-    filename = filename[:-4] + '.hdf'
-    if traces is not None:
-        columns = [name for name in traces.columns if ':' in name]
-        columns = sorted(columns, key=lambda x: int(x[:x.index(':')]))
-        columns = [name for name in traces.columns if ':' not in name] + columns
-        traces = traces.reindex(columns, axis=1)
-        traces.to_hdf(filename, 'traces')
-    if pars is not None:
-        pars.to_hdf(filename, 'parameters')
-    if globs is not None:
-        pd.Series(globs).to_hdf(filename, 'globals')
-
-    with pd.ExcelWriter(filename.replace('hdf', 'xlsx')) as writer:
-        if traces is not None:
-            traces.to_excel(writer, sheet_name='traces', index=False)
-        if pars is not None:
-            pars.to_excel(writer, sheet_name='parameters')
-        if globs is not None:
-            pd.Series(globs).to_excel(writer, sheet_name='globals')
-
-    return filename
-
-
-def read_hdf(filename):
-    filename = filename[:-4] + '.hdf'
-    traces = pd.read_hdf(filename, key='traces')
-    pars = pd.read_hdf(filename, key='parameters')
-    globs = dict(pd.read_hdf(filename, 'globals'))
-    return traces, pars, globs
 
 
 def get_color(name):
@@ -189,7 +156,7 @@ if __name__ == '__main__':
 
     if True:  # movie of plots
         movie = iio.Movie()
-        with movie(str(data.filename).replace('.xlsx','_traces.mp4')):
+        with movie(str(data.filename).replace('.xlsx', '_traces.mp4')):
             for trace_nr in tqdm(data.pars.index, postfix='Save plots'):
                 for color in data.globs['Colors']:
                     trace_name = f'{trace_nr}: HM {color} (a.u.)'
