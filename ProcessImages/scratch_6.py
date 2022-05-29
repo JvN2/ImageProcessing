@@ -1,12 +1,16 @@
 import numpy as np
 import pandas as pd
+import fnmatch
 
 import ProcessImages.ImageIO as im3
 import matplotlib.pyplot as plt
+from ProcessImages.TraceAnalysis import Traces
+from tqdm import tqdm
 
-im = np.random.normal(1,1,(100,100))
+filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\tmp.xlsx'
 
-f_im = im3.filter_image(im, highpass=5)
-plt.imshow(f_im)
-plt.show()
+data = Traces(filename)
+selection = fnmatch.filter(data.traces.columns, '*: I * (a.u.)')
 
+for trace in tqdm(data.traces[selection], postfix='Fit HMM'):
+    print(trace)

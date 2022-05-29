@@ -295,4 +295,4 @@ def find_peaks(image, radius=20, treshold_sd=3, n_traces=2000):
     peaks = np.asarray(peaks)
     if peaks.any():
         peaks = peaks[peaks[:, 1].argsort()]
-    return pd.DataFrame(peaks, columns=['x (pix)', 'y (pix)'])
+    return pd.DataFrame(peaks, columns=['X (pix)', 'Y (pix)'])
