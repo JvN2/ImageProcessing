@@ -102,7 +102,7 @@ def add_time_bar(img, t, t_max, progress_text=None):
     else:
         bg_color = 255
 
-    size_pix = np.asarray(img.size)
+    size_pix = np.asarray(img.im_shape)
     img_draw = ImageDraw.Draw(img)
 
     box = (5, size_pix[0] - 5, size_pix[0] - 5, size_pix[1] - 10)
@@ -130,7 +130,7 @@ def add_scale_bar(img, pix_um, scale=1, barsize_um=10):
     else:
         bg_color = 255
 
-    size_pix = np.asarray(img.size)
+    size_pix = np.asarray(img.im_shape)
     pix_um /= scale
     img_draw = ImageDraw.Draw(img)
     if pix_um is not None:

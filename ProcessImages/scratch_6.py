@@ -1,16 +1,11 @@
-import numpy as np
-import pandas as pd
-import fnmatch
-
-import ProcessImages.ImageIO as im3
-import matplotlib.pyplot as plt
-from ProcessImages.TraceAnalysis import Traces
-from tqdm import tqdm
-
-filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\tmp.xlsx'
-
-data = Traces(filename)
-selection = fnmatch.filter(data.traces.columns, '*: I * (a.u.)')
-
-for trace in tqdm(data.traces[selection], postfix='Fit HMM'):
-    print(trace)
+import cv2
+cap = cv2.VideoCapture()
+# The device number might be 0 or 1 depending on the device and the webcam
+cap.open(0, cv2.CAP_DSHOW)
+while(True):
+    ret, frame = cap.read()
+    cv2.imshow('frame', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+cap.release()
+cv2.destroyAllWindows()

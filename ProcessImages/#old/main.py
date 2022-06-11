@@ -14,7 +14,7 @@ def PIL2array(img, range=[0, I16]):
     """ Convert a PIL/Pillow image to a numpy array """
     frame = np.array(img.getdata(), np.uint16)
     frame = 255 * (np.clip(frame, range[0], range[1]) - range[0]) / (range[1] - range[0])
-    return frame.reshape(img.size[1], img.size[0]).astype(np.uint8)
+    return frame.reshape(img.im_shape[1], img.im_shape[0]).astype(np.uint8)
 
 
 def create_multi_tiff(foldername, filename_out="multiImage.tiff", range=[0, I16], selection=None, stack_size=2):

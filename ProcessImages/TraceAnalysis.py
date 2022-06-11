@@ -145,7 +145,8 @@ if __name__ == '__main__':
         hidden_markov_fit(data, selected_traces, treshold=100)
         data.to_file()
 
-    if False:  # histogram
+    if False:
+        # histogram
         save_hdf(filename, traces=traces, pars=pars, globs=globs)
         for color in globs['Colors']:
             selected_traces = fnmatch.filter(traces.columns, f'*: HM {color} (a.u.)')
@@ -154,7 +155,8 @@ if __name__ == '__main__':
             plt.hist(pars[f'I {color} (a.u.)'], color=get_color(color), range=(-100, 500), bins=100)
         plt.show()
 
-    if True:  # movie of plots
+    if True:
+        # movie of plots
         movie = iio.Movie()
         with movie(str(data.filename).replace('.xlsx', '_traces.mp4')):
             for trace_nr in tqdm(data.pars.index, postfix='Save plots'):

@@ -119,7 +119,7 @@ def merge_tiffs(filepaths, n_frames=None, SLIM_periods=1):
 
 def add_time_bar(img, i, n, progress_text=None, progress_step=None):
     bg_color = (255, 255, 255)
-    size_pix = np.asarray(img.size)
+    size_pix = np.asarray(img.im_shape)
     img_draw = ImageDraw.Draw(img)
     if progress_step is not None:
         box = (5, size_pix[0] - 5, size_pix[0] - 5, size_pix[1] - 10)
@@ -137,7 +137,7 @@ def add_scale_bar(img, pix_um, scale=1, barsize_um=5):
     else:
         bg_color = 255
 
-    size_pix = np.asarray(img.size)
+    size_pix = np.asarray(img.im_shape)
     pix_um /= scale
     img_draw = ImageDraw.Draw(img)
     if pix_um is not None:
@@ -151,7 +151,7 @@ def add_scale_bar(img, pix_um, scale=1, barsize_um=5):
 def tiff_to_gif(filename, scale=1, Irange=None, n_pages=None, frame_time_s=None, pix_um=None):
     img = Image.open(filename)
     img.load()
-    width, height = img.size
+    width, height = img.im_shape
     if n_pages is None or n_pages < 0:
         n_pages = img.n_frames
     new_size = (width * scale, height * scale)
@@ -195,7 +195,7 @@ def create_circular_mask(width, size=None, center=None, steepness=3):
 def tiffs_to_traces(filename, n_pages=None, n_traces=None, width=10, scale=2, Irange=None, treshold_sd=3):
     img = Image.open(filename)
     img.load()
-    im_width, im_height = img.size
+    im_width, im_height = img.im_shape
     if n_pages is None or n_pages < 0:
         n_pages = img.n_frames
 

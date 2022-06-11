@@ -21,10 +21,10 @@ class Movie():
     def __exit__(self, exc_type, exc_val, exc_tb):
         return self
 
-    def __call__(self, filename, fps=1):
+    def open(self, filename, fps=1):
         self.filename = filename
         ext = filename.split('.')[-1].lower()
-        codec = {'avi': 'DIVX', 'mp4': 'mp4v'}
+        codec = {'avi': 'DIVX', 'mp4': 'mp4v', 'jpg': 'JPEG', 'png': 'PNG'}
         self.codec = codec[ext]
         self.out = None
 
@@ -57,9 +57,9 @@ class Movie():
         for i, image in enumerate([red, green, blue, grey]):
             if image is not None:
                 if self.out is None:
-                    size = np.asarray(image).shape
-                    self.out = cv2.VideoWriter(self.filename, cv2.VideoWriter_fourcc(*self.codec), self.fps, size)
-                    self.rgb_image = np.zeros((size[0], size[1], 3), 'int32')
+                    self.size = np.asarray(image).shape
+                    self.out = cv2.VideoWriter(self.filename, cv2.VideoWriter_fourcc(*self.codec), self.fps, self.size[::-1])
+                    self.rgb_image = np.zeros((self.size[0], self.size[1], 3), 'int32')
                 if self.range[i] is None:
                     self.range[i] = [np.percentile(image, 10), np.percentile(image, 90)]
 
@@ -71,6 +71,7 @@ class Movie():
 
         # Use Pillow to annotate image
         im = Image.fromarray(np.clip(self.rgb_image, 0, 255).astype(np.uint8), mode='RGB')
+
         draw = ImageDraw.Draw(im)
         if label is not None:
             font_family = "arial.ttf"
@@ -85,8 +86,16 @@ class Movie():
                 draw.text(text_position + coords, f'{i}', fill='white', font=ImageFont.truetype(font_family, 10))
         del draw
 
-        # im.save(self.filename.replace('.mp4', f'_{self.frame_nr}.jpg'))
-        self.out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
+        if self.codec in ['JPEG', 'PNG']:
+            path = Path(self.filename[:-4])
+            if not path.exists():
+                path.mkdir(parents=True, exist_ok=True)
+            im.save(str(path)+(fr'/frame_{self.frame_nr}.{self.filename.split(".")[-1].lower()}'), self.codec)
+            cv2.imshow('test', cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
+        else:
+            frame = cv2.resize(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR), self.size[::-1])
+            self.out.write(frame)
+            # self.out.write(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         return
 
     def set_range(self, red=None, green=None, blue=None, grey=None):
@@ -174,42 +183,50 @@ def read_tiff(filename):
 
 
 def filter_image(image, highpass=None, lowpass=None, remove_outliers = False):
-    size = len(image[0])
-    x = np.outer(np.linspace(-size / 2, size / 2, size), np.ones(size)) - 0.5
-    y = x.T
+    size =np.shape(image)
+    if len(size) > 2:
+        size= size[-2:]
+    x = np.outer(np.linspace(-size[0] / 2, size[0] / 2, size[0]), np.ones(size[1])) - 0.5
+    y = np.outer(np.ones(size[0]), np.linspace(-size[1] / 2, size[1] / 2, size[1])) - 0.5
+
     r = (x ** 2 + y ** 2) ** 0.5
-    filter = np.ones_like(image).astype(float)
+    filter = np.ones(size).astype(float)
 
     if remove_outliers:
         median = np.median(image)
         image[image < median * 0.9] = median
 
     if (highpass is not None) and (highpass > 0):
-        filter *= 1 / (1 + 2 ** (size / highpass - r))  # Butterworth filter
+        filter *= 1 / (1 + 2 ** (size[0] / highpass - r))  # Butterworth filter
         # filter *= (1- np.exp(-(r / (2 * size / highpass)) ** 2)) # Gaussian filter
         # filter *= r < highpass
 
     if (lowpass is not None) and (lowpass > 0):
-        filter *= 1 - (1 / (1 + 2 ** (size / lowpass - r)))  # Butterworth filter
+        filter *= 1 - (1 / (1 + 2 ** (size[0] / lowpass - r)))  # Butterworth filter
         # filter *= np.exp(-(r / (2 * size / lowpass)) ** 2)  # Gaussian filter
         # filter *= r >lowpass
 
+    if len(np.shape(image)) == 2:
+        im_fft = fftpack.fft2(image)
+        im_fft = fftpack.fftshift(im_fft)
+        im_fft *= filter
 
-    # plt.imshow(filter, cmap='gray')
-    # plt.show()
+        im_fft = fftpack.fftshift(im_fft)
+        image = np.real(fftpack.ifft2(im_fft)).astype(float)
 
-    # image -= np.percentile(image, 25)
+        if highpass == 0:
+            image -= np.percentile(image, 25)
+    else:
+        for i, _ in enumerate(image):
+            im_fft = fftpack.fft2(image[i])
+            im_fft = fftpack.fftshift(im_fft)
+            im_fft *= filter
 
-    im_fft = fftpack.fft2(image)
-    im_fft = fftpack.fftshift(im_fft)
-    im_fft *= filter
+            im_fft = fftpack.fftshift(im_fft)
+            image[i] = np.real(fftpack.ifft2(im_fft)).astype(float)
 
-    im_fft = fftpack.fftshift(im_fft)
-    image = np.real(fftpack.ifft2(im_fft)).astype(float)
-
-    if highpass == 0:
-        image -= np.percentile(image, 25)
-
+            if highpass == 0:
+                image[i] -= np.percentile(image[i], 25)
     return image
 
 
