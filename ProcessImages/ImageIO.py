@@ -296,12 +296,10 @@ def create_circular_mask(width, size=None, center=None, steepness=3):
 
 
 def find_peaks(image, radius=20, treshold_sd=3, n_traces=2000):
-    max = np.max(image)
     median = np.median(image)
     treshold = np.median(image) + treshold_sd * np.std(image)
     peaks = []
     for _ in tqdm(range(n_traces), postfix='Find peaks'):
-        # while max > treshold and len(peaks) < n_traces:
         max_index = np.asarray(np.unravel_index(np.argmax(image, axis=None), image.shape))
         mask = create_circular_mask(radius, np.shape(image), max_index)
         image = mask * median + (1 - mask) * image
