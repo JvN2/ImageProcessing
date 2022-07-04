@@ -50,6 +50,8 @@ if __name__ == '__main__':
     filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
+    filename = r'C:\Users\noort\Downloads\Slide2_Channel1_DNA1+LigA_FOV3_100R100GExp_70R70G_200rep_2022-06-22_488-637_Zyla_18.31.12.ims'
+    # filename = r'C:\Users\noort\Downloads\Slide2_Channel2_DNA2+LigA_FOV9_100R100GExp_70R50G_200rep_2022-06-22_488-637_Zyla_19.33.34.ims'
 
     image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0, )
     data = ta.Traces(filename)
@@ -61,6 +63,7 @@ if __name__ == '__main__':
     lowpass = 5
 
     # Correct drift
+    # if False:
     if 'Drift x (nm)' not in data.traces.columns:
         drift = iio.DriftCorrection()
         for frame in tqdm(data.traces.index, postfix='Drift correction'):
@@ -73,13 +76,13 @@ if __name__ == '__main__':
     if 'X (pix)' not in data.pars.columns:
         summed_image = np.zeros_like(image_stack[0, 0]).astype(float)
         shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
-        for frame, s in enumerate(tqdm(shift[:20], postfix='Sum images')):
+        for frame, s in enumerate(tqdm(shift[:40], postfix='Sum images')):
             summed_image += ndimage.shift(image_stack[frame, data.globs['Colors'].index('637')], s)
 
         summed_image = iio.filter_image(summed_image, highpass=highpass, lowpass=lowpass, remove_outliers=True)
 
         data.globs['Radius (nm)'] = 250
-        peaks = iio.find_peaks(summed_image, 4 * data.globs['Radius (nm)'] / data.globs['Pixel (nm)'], treshold_sd=2.0)
+        peaks = iio.find_peaks(summed_image, 4 * data.globs['Radius (nm)'] / data.globs['Pixel (nm)'], treshold_sd=5.0)
         data.pars = pd.concat([data.pars, peaks], axis=1)
         data.to_file()
 
@@ -100,16 +103,17 @@ if __name__ == '__main__':
 
     # save movie
     shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
-    movie = iio.Movie()
-    with movie(filename.replace('.ims', '.mp4'), 4):
-        movie.set_range(red=[0, 30], green=[0, 30], blue=[0, 30])
-        empty_image = np.zeros_like(image_stack[0, 0,]) - 1e6
-        movie.set_circles(np.asarray(data.pars[['X (pix)', 'Y (pix)']]),
-                          data.globs['Radius (nm)'] / data.globs['Pixel (nm)'])
-        for frame, s in enumerate(tqdm(shift, postfix='Add frames to movie')):
-            label = f'T = {timedelta(seconds=int(data.traces["Time (s)"][frame]))}'
-            rgb_image = [
-                iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass, lowpass=lowpass)
-                if c in data.globs['Colors'] else empty_image for c in ['637', '561', '488']]
-            rgb_image = ndimage.shift(rgb_image, [0, s[0], s[1]])
-            movie.add_frame(red=rgb_image[0], green=rgb_image[1], blue=rgb_image[2], label=label)
+    # movie = iio.Movie()
+    # with movie(filename.replace('.ims', '.mp4'), 4):
+    movie = iio.Movie(filename.replace('.ims', '.mp4'), 4)
+    movie.set_range(red=[0, 30], green=[0, 30], blue=[0, 30])
+    empty_image = np.zeros_like(image_stack[0, 0,]) - 1e6
+    movie.set_circles(np.asarray(data.pars[['X (pix)', 'Y (pix)']]),
+                      data.globs['Radius (nm)'] / data.globs['Pixel (nm)'])
+    for frame, s in enumerate(tqdm(shift, postfix='Add frames to movie')):
+        label = f'T = {timedelta(seconds=int(data.traces["Time (s)"][frame]))}'
+        rgb_image = [
+            iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass, lowpass=lowpass)
+            if c in data.globs['Colors'] else empty_image for c in ['637', '561', '488']]
+        rgb_image = ndimage.shift(rgb_image, [0, s[0], s[1]])
+        movie.add_frame(red=rgb_image[0], green=rgb_image[1], blue=rgb_image[2], label=label)

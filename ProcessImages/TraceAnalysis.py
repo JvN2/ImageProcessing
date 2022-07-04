@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from hmmlearn.hmm import GaussianHMM
+from natsort import natsorted
 from tqdm import tqdm
 
 import ProcessImages.ImageIO as iio
@@ -57,12 +58,18 @@ class Traces():
             self.filename = Path(filename).with_suffix('.xlsx')
         with pd.ExcelWriter(self.filename) as writer:
             if not self.traces.empty:
+                self.sort_traces()
                 self.traces.to_excel(writer, sheet_name='traces', index=False)
             if not self.pars.empty:
                 self.pars.to_excel(writer, sheet_name='parameters')
             if not self.globs.empty:
                 self.globs.to_excel(writer, sheet_name='globals')
         return
+
+    def sort_traces(self):
+        reordered_cols = np.append([c for c in self.traces.columns if ': ' not in c],
+                                   natsorted([c for c in self.traces.columns if ': ' in c]))
+        self.traces = self.traces[reordered_cols]
 
 
 def get_color(name):
@@ -78,7 +85,7 @@ def get_label(name, sep=': '):
     return int(name.split(sep)[0]) if sep in name else None
 
 
-def fitHMM(Q):
+def _fitHMM(Q):
     nSamples = len(Q)
     # fit Gaussian HMM to Q
     model = GaussianHMM(n_components=2, n_iter=1000).fit(np.reshape(Q, [len(Q), 1]))
@@ -115,7 +122,7 @@ def hidden_markov_fit(data, traces, treshold=None):
         label = int(trace.split(':')[0])
         color = trace.split(' I ')[-1].split(' (a.u.)')[0]
         try:
-            states, mus, sigmas, P, logProb, samples = fitHMM(data.traces[trace].values)
+            states, mus, sigmas, P, logProb, samples = _fitHMM(data.traces[trace].values)
             if treshold is not None:
                 if (mus[1] - mus[0]) < treshold:
                     states *= 0
@@ -136,6 +143,8 @@ def hidden_markov_fit(data, traces, treshold=None):
 if __name__ == '__main__':
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.csv'
     # filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
+    filename = r'C:\Users\noort\Downloads\Slide2_Channel2_DNA2+LigA_FOV9_100R100GExp_70R50G_200rep_2022-06-22_488-637_Zyla_19.33.34.xlsx'
+    filename = r'C:\Users\noort\Downloads\Slide2_Channel1_DNA1+LigA_FOV3_100R100GExp_70R70G_200rep_2022-06-22_488-637_Zyla_18.31.12.xlsx'
 
     data = Traces(filename)
 
@@ -157,20 +166,20 @@ if __name__ == '__main__':
 
     if True:
         # movie of plots
-        movie = iio.Movie()
-        with movie(str(data.filename).replace('.xlsx', '_traces.mp4')):
-            for trace_nr in tqdm(data.pars.index, postfix='Save plots'):
-                for color in data.globs['Colors']:
-                    trace_name = f'{trace_nr}: HM {color} (a.u.)'
-                    offset = data.traces[trace_name].min()
-                    plt.scatter(data.traces['Time (s)'], data.traces[trace_name.replace(' HM ', ' I ')] - offset,
-                                edgecolors=get_color(color), s=40, facecolors='none')
-                    plt.plot(data.traces['Time (s)'], data.traces[trace_name] - offset, color=get_color(color),
-                             label=color)
-                plt.legend()
-                plt.xlabel('Time (s)')
-                plt.ylabel('Intensity (a.u.)')
-                plt.ylim((-100, 900))
-                plt.title(f'trace {trace_nr}')
+        movie = iio.Movie(filename.replace('.xlsx', '_traces.mp4'), 4)
+        # with movie(str(data.filename).replace('.xlsx', '_traces.mp4')):
+        for trace_nr in tqdm(data.pars.index, postfix='Save plots'):
+            for color in data.globs['Colors']:
+                trace_name = f'{trace_nr}: HM {color} (a.u.)'
+                offset = data.traces[trace_name].min()
+                plt.scatter(data.traces['Time (s)'], data.traces[trace_name.replace(' HM ', ' I ')] - offset,
+                            edgecolors=get_color(color), s=40, facecolors='none')
+                plt.plot(data.traces['Time (s)'], data.traces[trace_name] - offset, color=get_color(color),
+                         label=color)
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Intensity (a.u.)')
+            plt.ylim((-500, 2100))
+            plt.title(f'trace {trace_nr}')
 
-                movie.add_plot()
+            movie.add_plot()

@@ -12,16 +12,16 @@ from uncertainties import ufloat
 
 
 class Movie():
-    def __init__(self):
-        return
+    # def __init__(self):
+    #     return
+    #
+    # def __enter__(self):
+    #     return self
+    #
+    # def __exit__(self, exc_type, exc_val, exc_tb):
+    #     return self
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return self
-
-    def open(self, filename, fps=1):
+    def __init__(self, filename, fps=1):
         self.filename = filename
         ext = filename.split('.')[-1].lower()
         codec = {'avi': 'DIVX', 'mp4': 'mp4v', 'jpg': 'JPEG', 'png': 'PNG'}
@@ -35,7 +35,7 @@ class Movie():
 
         self.circle_radius = None
         self.circle_coords = []
-        return self
+        return
 
     def add_plot(self):
         fig = plt.gcf()
@@ -58,7 +58,8 @@ class Movie():
             if image is not None:
                 if self.out is None:
                     self.size = np.asarray(image).shape
-                    self.out = cv2.VideoWriter(self.filename, cv2.VideoWriter_fourcc(*self.codec), self.fps, self.size[::-1])
+                    self.out = cv2.VideoWriter(self.filename, cv2.VideoWriter_fourcc(*self.codec), self.fps,
+                                               self.size[::-1])
                     self.rgb_image = np.zeros((self.size[0], self.size[1], 3), 'int32')
                 if self.range[i] is None:
                     self.range[i] = [np.percentile(image, 10), np.percentile(image, 90)]
@@ -90,7 +91,7 @@ class Movie():
             path = Path(self.filename[:-4])
             if not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
-            im.save(str(path)+(fr'/frame_{self.frame_nr}.{self.filename.split(".")[-1].lower()}'), self.codec)
+            im.save(str(path) + (fr'/frame_{self.frame_nr}.{self.filename.split(".")[-1].lower()}'), self.codec)
             cv2.imshow('test', cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         else:
             frame = cv2.resize(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR), self.size[::-1])
@@ -182,10 +183,10 @@ def read_tiff(filename):
     return np.asarray(plt.imread(Path(filename)).astype(float))
 
 
-def filter_image(image, highpass=None, lowpass=None, remove_outliers = False):
-    size =np.shape(image)
+def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
+    size = np.shape(image)
     if len(size) > 2:
-        size= size[-2:]
+        size = size[-2:]
     x = np.outer(np.linspace(-size[0] / 2, size[0] / 2, size[0]), np.ones(size[1])) - 0.5
     y = np.outer(np.ones(size[0]), np.linspace(-size[1] / 2, size[1] / 2, size[1])) - 0.5
 
@@ -262,15 +263,25 @@ def fit_peak(Z, show=False, center=[0, 0]):
     N = len(Z)
     X, Y = np.meshgrid(np.linspace(0, N - 1, N) - N / 2 + center[0],
                        np.linspace(0, N - 1, N) - N / 2 + center[1])
-    p = (center[0], center[1], 2, 2, np.max(Z), np.min(Z))
+    pars_guess = (center[0], center[1], 2, 2, np.max(Z), np.min(Z))
+
+    bounds = np.asarray(((0, np.shape(Z)[0]), (0, np.shape(Z)[1]), (0.5, 10), (0.5, 10),
+                         (np.max(Z) * 0.1, np.max(Z) * 10), (np.min(Z) * 0.1, np.min(Z) * 10))).T
 
     xdata = np.vstack((X.ravel(), Y.ravel()))
-    popt, pcov = curve_fit(_gaussian, xdata, Z.ravel(), p)
-    fit = gaussian(X, Y, *popt)
 
-    pars = []
-    for i, p in enumerate(popt):
-        pars.append(ufloat(p, np.sqrt(pcov[i, i])))
+    try:
+        popt, pcov = curve_fit(_gaussian, xdata, Z.ravel(), pars_guess, bounds=bounds)
+        fit = gaussian(X, Y, *popt)
+
+        pars = []
+        for i, p in enumerate(popt):
+            pars.append(ufloat(p, np.sqrt(pcov[i, i])))
+    except:
+        pars = []
+        for i, p in enumerate(pars_guess):
+            pars.append(ufloat(p, np.nan))
+        fit = gaussian(X, Y, *pars_guess)
 
     if show:
         # Plot the 3D figure of the fitted function and the residuals.
