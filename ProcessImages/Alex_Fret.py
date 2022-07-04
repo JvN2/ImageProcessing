@@ -5,6 +5,8 @@ from PIL import Image
 from natsort import natsorted
 from scipy import ndimage
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')
 
 import ProcessImages.ImageIO as iio
 
