@@ -12,6 +12,8 @@ from tqdm import tqdm
 import ProcessImages.ImageIO as iio
 import ProcessImages.TraceAnalysis as ta
 
+import matplotlib.pyplot as plt
+
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 
@@ -47,42 +49,71 @@ def ims_read_header(filename, data=None):
 
 if __name__ == '__main__':
     # open data file
-    filename = r'C:\Users\noort\Downloads\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
-    filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.ims'
-    filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
-    filename = r'C:\Users\noort\Downloads\Slide2_Channel1_DNA1+LigA_FOV3_100R100GExp_70R70G_200rep_2022-06-22_488-637_Zyla_18.31.12.ims'
-    # filename = r'C:\Users\noort\Downloads\Slide2_Channel2_DNA2+LigA_FOV9_100R100GExp_70R50G_200rep_2022-06-22_488-637_Zyla_19.33.34.ims'
+    ref_filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA+DNA_FOV3_50Expboth_50Pwboth_40rep_2022-07-08_488-637_Zyla_17.59.46.ims'
+    filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA_FOV3_50Expboth_50Pwboth_500rep_2022-07-08_488_Zyla_18.00.37.ims'
+
+    # filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA+DNA_FOV3_50Expboth_50Pwboth_40rep_2022-07-08_488-637_Zyla_17.59.46.ims'
+    # ref_filename = None
 
     image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0, )
     data = ta.Traces(filename)
+
+    if ref_filename is not None:
+        ref_image_stack = ims(ref_filename, squeeze_output=True, ResolutionLevelLock=0, )
+        ref_globs, ref_df = ims_read_header(ref_filename)
 
     if 'Pixel (nm)' not in data.globs.index:
         ims_read_header(filename, data)
 
     highpass = 100
     lowpass = 5
+    anchor_peaks = '637'
 
     # Correct drift
     # if False:
     if 'Drift x (nm)' not in data.traces.columns:
         drift = iio.DriftCorrection()
         for frame in tqdm(data.traces.index, postfix='Drift correction'):
-            rgb_image = [iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass) for c in
+            ref_image = [iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass) for c in
                          data.globs['Colors']]
-            drift.calc_drift(np.sum(rgb_image, axis=0), persistence=0.5)
+            drift.calc_drift(np.sum(ref_image, axis=0), persistence=0.5)
         data.traces = pd.concat([data.traces, drift.get_df(data.globs['Pixel (nm)'])], axis=1)
+
+        if ref_filename is not None:
+            data.globs['reference filename'] = ref_filename
+            image = image_stack[0, 0]
+            image = iio.filter_image(image, highpass=highpass)
+
+            ref_image = ref_image_stack[
+                ref_image_stack.shape[0] - 1, ref_globs['Colors'].index(data.globs['Colors'][0])]
+            ref_image = iio.filter_image(image, highpass=highpass)
+            shift = drift.calc_drift(image, ref_image=ref_image)
+            for s, c in zip(shift, ['x', 'y']):
+                data.traces[f'Drift {c} (nm)'] -= s
+
+        data.to_file()
 
     # find peaks
     if 'X (pix)' not in data.pars.columns:
-        summed_image = np.zeros_like(image_stack[0, 0]).astype(float)
-        shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
-        for frame, s in enumerate(tqdm(shift[:40], postfix='Sum images')):
-            summed_image += ndimage.shift(image_stack[frame, data.globs['Colors'].index('637')], s)
-
-        summed_image = iio.filter_image(summed_image, highpass=highpass, lowpass=lowpass, remove_outliers=True)
-
+        if ref_filename is None:
+            mean_image = np.zeros_like(image_stack[0, 0]).astype(float)
+            shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
+            mean_length = 40
+            for frame, s in enumerate(tqdm(shift[:mean_length], postfix='Sum images')):
+                mean_image += ndimage.shift(image_stack[frame, data.globs['Colors'].index(anchor_peaks)], s)
+            mean_image /= mean_length
+        else:
+            df = pd.read_excel(ref_filename.replace('.ims', '.xlsx'), 'traces')
+            for a in ['x', 'y']:
+                df[f'Drift {a} (nm)'] -= df[f'Drift {a} (nm)'].iloc[-1]
+            mean_image = np.zeros_like(ref_image_stack[0, 0]).astype(float)
+            shift = np.asarray([df['Drift x (nm)'], df['Drift y (nm)']]).T / data.globs['Pixel (nm)']
+            for frame, s in enumerate(tqdm(shift, postfix='Sum images')):
+                mean_image += ndimage.shift(ref_image_stack[frame, ref_globs['Colors'].index(anchor_peaks)], s)
+            mean_image /= len(shift)
+        mean_image = iio.filter_image(mean_image, highpass=highpass, lowpass=lowpass, remove_outliers=True)
         data.globs['Radius (nm)'] = 250
-        peaks = iio.find_peaks(summed_image, 4 * data.globs['Radius (nm)'] / data.globs['Pixel (nm)'], treshold_sd=5.0)
+        peaks = iio.find_peaks(mean_image, 4 * data.globs['Radius (nm)'] / data.globs['Pixel (nm)'], treshold_sd=5.0)
         data.pars = pd.concat([data.pars, peaks], axis=1)
         data.to_file()
 
@@ -102,18 +133,23 @@ if __name__ == '__main__':
         data.to_file()
 
     # save movie
-    shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
-    # movie = iio.Movie()
-    # with movie(filename.replace('.ims', '.mp4'), 4):
-    movie = iio.Movie(filename.replace('.ims', '.mp4'), 4)
-    movie.set_range(red=[0, 30], green=[0, 30], blue=[0, 30])
-    empty_image = np.zeros_like(image_stack[0, 0,]) - 1e6
-    movie.set_circles(np.asarray(data.pars[['X (pix)', 'Y (pix)']]),
-                      data.globs['Radius (nm)'] / data.globs['Pixel (nm)'])
-    for frame, s in enumerate(tqdm(shift, postfix='Add frames to movie')):
-        label = f'T = {timedelta(seconds=int(data.traces["Time (s)"][frame]))}'
-        rgb_image = [
-            iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass, lowpass=lowpass)
-            if c in data.globs['Colors'] else empty_image for c in ['637', '561', '488']]
-        rgb_image = ndimage.shift(rgb_image, [0, s[0], s[1]])
-        movie.add_frame(red=rgb_image[0], green=rgb_image[1], blue=rgb_image[2], label=label)
+    if True:
+        shift = np.asarray([data.traces['Drift x (nm)'], data.traces['Drift y (nm)']]).T / data.globs['Pixel (nm)']
+        # movie = iio.Movie()
+        # with movie(filename.replace('.ims', '.mp4'), 4):
+        movie = iio.Movie(filename.replace('.ims', '.mp4'), 4)
+        movie.set_range(red=[0, 30], green=[0, 30], blue=[0, 30])
+        empty_image = np.zeros_like(image_stack[0, 0,]) - 1e6
+        movie.set_circles(np.asarray(data.pars[['X (pix)', 'Y (pix)']]),
+                          data.globs['Radius (nm)'] / data.globs['Pixel (nm)'])
+        for frame, s in enumerate(tqdm(shift, postfix='Add frames to movie')):
+            label = f'T = {timedelta(seconds=int(data.traces["Time (s)"][frame]))}'
+            ref_image = [
+                iio.filter_image(image_stack[frame, data.globs['Colors'].index(c)], highpass=highpass, lowpass=lowpass)
+                if c in data.globs['Colors'] else empty_image for c in ['637', '561', '488']]
+            ref_image = ndimage.shift(ref_image, [0, s[0], s[1]])
+
+            # if ref_filename is not None:
+            #     ref_image[['637', '561', '488'].index(anchor_peaks)] = mean_image
+
+            movie.add_frame(red=ref_image[0], green=ref_image[1], blue=ref_image[2], label=label)

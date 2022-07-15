@@ -128,7 +128,7 @@ def hidden_markov_fit(data, traces, treshold=None):
                     states *= 0
                     mus[0] = np.median(data.traces[trace].values)
                 else:
-                    data.pars.at[label, f'{color}: I (a.u.)'] = mus[1] - mus[0]
+                    # data.pars.at[label, f'{color}: I (a.u.)'] = mus[1] - mus[0]
                     if P[1, 0] != 0:
                         data.pars.at[label, f'{color}: Tau on (s)'] = np.min([dt / P[1, 0], time[-1]])
                     if P[0, 1] != 0:
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.csv'
     # filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
     filename = r'C:\Users\noort\Downloads\Slide2_Channel2_DNA2+LigA_FOV9_100R100GExp_70R50G_200rep_2022-06-22_488-637_Zyla_19.33.34.xlsx'
-    filename = r'C:\Users\noort\Downloads\Slide2_Channel1_DNA1+LigA_FOV3_100R100GExp_70R70G_200rep_2022-06-22_488-637_Zyla_18.31.12.xlsx'
+    filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA_FOV3_50Expboth_50Pwboth_500rep_2022-07-08_488_Zyla_18.00.37.xlsx'
 
     data = Traces(filename)
 
@@ -172,6 +172,7 @@ if __name__ == '__main__':
             for color in data.globs['Colors']:
                 trace_name = f'{trace_nr}: HM {color} (a.u.)'
                 offset = data.traces[trace_name].min()
+                offset = 0
                 plt.scatter(data.traces['Time (s)'], data.traces[trace_name.replace(' HM ', ' I ')] - offset,
                             edgecolors=get_color(color), s=40, facecolors='none')
                 plt.plot(data.traces['Time (s)'], data.traces[trace_name] - offset, color=get_color(color),

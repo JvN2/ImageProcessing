@@ -117,7 +117,9 @@ class DriftCorrection():
         self.shift = []
         return
 
-    def calc_drift(self, image, sub_pixel=True, persistence=None):
+    def calc_drift(self, image, sub_pixel=True, persistence=None, ref_image = None):
+        if ref_image is not None:
+            self.ref_image = ref_image
         if persistence is not None:
             self.persistence = persistence
         if self.ref_image is None:
@@ -187,6 +189,7 @@ def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
     size = np.shape(image)
     if len(size) > 2:
         size = size[-2:]
+
     x = np.outer(np.linspace(-size[0] / 2, size[0] / 2, size[0]), np.ones(size[1])) - 0.5
     y = np.outer(np.ones(size[0]), np.linspace(-size[1] / 2, size[1] / 2, size[1])) - 0.5
 
@@ -233,10 +236,12 @@ def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
 
 def get_drift(image, ref_image, sub_pixel=True):
     shift_image = np.abs(np.fft.fftshift(np.fft.ifft2(np.fft.fft2(image).conjugate() * np.fft.fft2(ref_image))))
+
     max = np.asarray(np.unravel_index(np.argmax(shift_image, axis=None), shift_image.shape))
     if sub_pixel:
         _, offset = fit_peak(get_roi(shift_image, max, 10))
-        max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
+        # max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
+        max = max + np.asarray([offset[1], offset[0]])
     return max - np.asarray(np.shape(shift_image)) / 2.0
 
 
@@ -265,7 +270,7 @@ def fit_peak(Z, show=False, center=[0, 0]):
                        np.linspace(0, N - 1, N) - N / 2 + center[1])
     pars_guess = (center[0], center[1], 2, 2, np.max(Z), np.min(Z))
 
-    bounds = np.asarray(((0, np.shape(Z)[0]), (0, np.shape(Z)[1]), (0.5, 10), (0.5, 10),
+    bounds = np.asarray(((-np.shape(Z)[0]/2, np.shape(Z)[0]/2), (-np.shape(Z)[1]/2, np.shape(Z)[1]/2), (0.5, 10), (0.5, 10),
                          (np.max(Z) * 0.1, np.max(Z) * 10), (np.min(Z) * 0.1, np.min(Z) * 10))).T
 
     xdata = np.vstack((X.ravel(), Y.ravel()))
@@ -292,7 +297,8 @@ def fit_peak(Z, show=False, center=[0, 0]):
         ax.set_zlim(-4, np.max(fit))
         plt.show()
 
-    return fit, np.asarray(pars)
+    # return fit, np.asarray(pars)
+    return fit, popt
 
 
 def create_circular_mask(width, size=None, center=None, steepness=3):
