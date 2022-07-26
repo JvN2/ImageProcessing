@@ -52,8 +52,9 @@ if __name__ == '__main__':
     ref_filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA+DNA_FOV3_50Expboth_50Pwboth_40rep_2022-07-08_488-637_Zyla_17.59.46.ims'
     filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA_FOV3_50Expboth_50Pwboth_500rep_2022-07-08_488_Zyla_18.00.37.ims'
 
-    # filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA+DNA_FOV3_50Expboth_50Pwboth_40rep_2022-07-08_488-637_Zyla_17.59.46.ims'
-    # ref_filename = None
+    ref_filename = r'D:\2022-07-08\Slide1_Chann1_Pol1FL+DNA_FOV4_50Expboth_50Pwboth_40rep_2022-07-08_565+637_Zyla_16.27.09.ims'
+    filename =     r'D:\2022-07-08\Slide1_Chann1_Pol1FL_FOV4_50Expboth_50Pwboth_500rep_2022-07-08_565_Zyla_16.28.52.ims'
+
 
     image_stack = ims(filename, squeeze_output=True, ResolutionLevelLock=0, )
     data = ta.Traces(filename)

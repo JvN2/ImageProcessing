@@ -88,7 +88,7 @@ def get_label(name, sep=': '):
 def _fitHMM(Q):
     nSamples = len(Q)
     # fit Gaussian HMM to Q
-    model = GaussianHMM(n_components=2, n_iter=1000).fit(np.reshape(Q, [len(Q), 1]))
+    model = GaussianHMM(n_components=2, n_iter=1000, min_covar=1e-7).fit(np.reshape(Q, [len(Q), 1]))
 
     # classify each observation as state 0 or 1
     hidden_states = model.predict(np.reshape(Q, [len(Q), 1]))
@@ -140,20 +140,51 @@ def hidden_markov_fit(data, traces, treshold=None):
     return
 
 
+def treshold_signal(data, traces, treshold_sd=4):
+    time = data.traces['Time (s)'].values
+    dt = np.median(np.diff(time))
+
+    for trace_nr in traces:  # tqdm(traces, postfix=f'treshold trace @{treshold}'):
+        label = int(trace_nr.split(':')[0])
+        color = trace_nr.split(' I ')[-1].split(' (a.u.)')[0]
+        trace = data.traces[trace_nr].values
+
+        mus = [np.median(trace)]
+        treshold = treshold_sd * np.std(trace - mus[0])
+        states = trace - mus[0] > treshold
+
+        if np.sum(states) > 0:
+            mus.append(np.median(trace[states]))
+            data.traces[trace_nr.replace(' I ', ' TH ')] = mus[1] * states + mus[0] * (1 - states)
+        else:
+            data.traces[trace_nr.replace(' I ', ' TH ')] = states * 0 + mus[0]
+
+        # if label == 120:
+        #     plt.scatter(time, trace, edgecolors=get_color(color), s=40, facecolors='none')
+        #     plt.plot(time, data.traces[trace_nr.replace(' I ', ' TH ')], color = 'k')
+        #     plt.show()
+
+    return
+
+    # mus[0] = np.median(data.traces[trace].values)
+    # states = data.traces[trace].values * 0
+    # data.traces[trace.replace(' I ', ' HM ')] = mus[1] * states + mus[0] * (1 - states)
+
+
 if __name__ == '__main__':
-    filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV3_512_Exp50r50o_pr%70r40o_Rep100_Int120_2022-04-22_Protocol 5_14.33.32.csv'
-    # filename = r'C:\Users\jvann\surfdrive\werk\Data\CoSMoS\Slide1_Chan1_FOV13_512_Exp50g60r50o_Rep100_Int130_2022-04-10_Protocol 4_16.29.35.ims'
-    filename = r'C:\Users\noort\Downloads\Slide2_Channel2_DNA2+LigA_FOV9_100R100GExp_70R50G_200rep_2022-06-22_488-637_Zyla_19.33.34.xlsx'
-    filename = r'C:\Users\noort\Downloads\Slide2_Chann1_LigA_FOV3_50Expboth_50Pwboth_500rep_2022-07-08_488_Zyla_18.00.37.xlsx'
+    filename = r'D:\2022-07-08\Slide1_Chann1_Pol1FL_FOV4_50Expboth_50Pwboth_500rep_2022-07-08_565_Zyla_16.28.52.ims'
 
     data = Traces(filename)
-
-    if len(fnmatch.filter(data.traces.columns, '*: HM * (a.u.)')) == 0:
+    selected_traces = fnmatch.filter(data.traces.columns, '*: I * (a.u.)')
+    # if len(fnmatch.filter(data.traces.columns, '*: HM * (a.u.)')) == 0:
+    if True:
         # Hidden Markov fit
-        selected_traces = fnmatch.filter(data.traces.columns, '*: I * (a.u.)')
-        hidden_markov_fit(data, selected_traces, treshold=100)
+        hidden_markov_fit(data, selected_traces, treshold=300)
         data.to_file()
-
+    if False:
+        # treshold data
+        treshold_signal(data, selected_traces)
+        data.to_file()
     if False:
         # histogram
         save_hdf(filename, traces=traces, pars=pars, globs=globs)
@@ -166,7 +197,7 @@ if __name__ == '__main__':
 
     if True:
         # movie of plots
-        movie = iio.Movie(filename.replace('.xlsx', '_traces.mp4'), 4)
+        movie = iio.Movie(filename.replace('.ims', '_traces.mp4'), 4)
         # with movie(str(data.filename).replace('.xlsx', '_traces.mp4')):
         for trace_nr in tqdm(data.pars.index, postfix='Save plots'):
             for color in data.globs['Colors']:
@@ -177,6 +208,8 @@ if __name__ == '__main__':
                             edgecolors=get_color(color), s=40, facecolors='none')
                 plt.plot(data.traces['Time (s)'], data.traces[trace_name] - offset, color=get_color(color),
                          label=color)
+                # plt.plot(data.traces['Time (s)'], data.traces[trace_name.replace(' HM ', ' TH ')] - offset, color='k',
+                #          label='tresholded')
             plt.legend()
             plt.xlabel('Time (s)')
             plt.ylabel('Intensity (a.u.)')
