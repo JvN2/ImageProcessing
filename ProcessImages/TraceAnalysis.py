@@ -71,6 +71,37 @@ class Traces():
                                    natsorted([c for c in self.traces.columns if ': ' in c]))
         self.traces = self.traces[reordered_cols]
 
+    def read_log(self, filename=None):
+        if filename is None:
+            filename = self.filename
+        with open(Path(filename).with_suffix('.log')) as f:
+            contents = f.read().replace('"', '')
+        contents = contents.split('\n')
+        section = 'None'
+        log = []
+        for line in contents:
+            if line is None:
+                break
+            if '[' in line:
+                section = line[1:-1]
+            if ' = ' in line:
+                log.append(line.split(' = ') + [section])
+
+        self.globs = pd.DataFrame(log, columns=['parameter', 'value', 'section']).set_index('parameter')
+
+    def get_glob(self, parameter, section = None):
+        if section is not None:
+            df = self.globs[self.globs['section'] == section]
+        else:
+            df = self.globs
+        try:
+            return float(df.loc[parameter]['value'])
+        except ValueError:
+            return df.loc[parameter]['value']
+
+    def set_glob(self, parameter, value, section = ''):
+        self.globs.loc[parameter] = [value, section]
+
 
 def get_color(name):
     colors = {'561': 'green', '637': 'red', '488': 'blue'}

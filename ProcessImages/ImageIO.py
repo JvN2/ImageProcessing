@@ -23,6 +23,7 @@ class Movie():
 
     def __init__(self, filename, fps=1):
         self.filename = filename
+        print(f'Saving movie to {filename} ...')
         ext = filename.split('.')[-1].lower()
         codec = {'avi': 'DIVX', 'mp4': 'mp4v', 'jpg': 'JPEG', 'png': 'PNG'}
         self.codec = codec[ext]
@@ -185,6 +186,7 @@ def read_tiff(filename):
     return np.asarray(plt.imread(Path(filename)).astype(float))
 
 
+
 def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
     size = np.shape(image)
     if len(size) > 2:
@@ -201,12 +203,12 @@ def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
         image[image < median * 0.9] = median
 
     if (highpass is not None) and (highpass > 0):
-        filter *= 1 / (1 + 2 ** (size[0] / highpass - r))  # Butterworth filter
+        filter *= 1 - (1 / (1 + 2 ** (size[0] / highpass - r)))  # Butterworth filter
         # filter *= (1- np.exp(-(r / (2 * size / highpass)) ** 2)) # Gaussian filter
         # filter *= r < highpass
 
     if (lowpass is not None) and (lowpass > 0):
-        filter *= 1 - (1 / (1 + 2 ** (size[0] / lowpass - r)))  # Butterworth filter
+        filter *= 1 / (1 + 2 ** (size[0] / lowpass - r))  # Butterworth filter
         # filter *= np.exp(-(r / (2 * size / lowpass)) ** 2)  # Gaussian filter
         # filter *= r >lowpass
 
@@ -236,12 +238,17 @@ def filter_image(image, highpass=None, lowpass=None, remove_outliers=False):
 
 def get_drift(image, ref_image, sub_pixel=True):
     shift_image = np.abs(np.fft.fftshift(np.fft.ifft2(np.fft.fft2(image).conjugate() * np.fft.fft2(ref_image))))
-
     max = np.asarray(np.unravel_index(np.argmax(shift_image, axis=None), shift_image.shape))
+
     if sub_pixel:
         _, offset = fit_peak(get_roi(shift_image, max, 10))
         # max = max + np.asarray([offset[1].nominal_value, offset[0].nominal_value])
         max = max + np.asarray([offset[1], offset[0]])
+
+    # print(f'max = {max}')
+    # plt.imshow(shift_image, cmap = 'Greys')
+    # plt.show()
+
     return max - np.asarray(np.shape(shift_image)) / 2.0
 
 

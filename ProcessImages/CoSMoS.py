@@ -66,8 +66,8 @@ if __name__ == '__main__':
     if 'Pixel (nm)' not in data.globs.index:
         ims_read_header(filename, data)
 
-    highpass = 100
-    lowpass = 5
+    highpass = 5
+    lowpass = 100
     anchor_peaks = '637'
 
     # Correct drift
