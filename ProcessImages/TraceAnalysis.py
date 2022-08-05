@@ -89,7 +89,7 @@ class Traces():
 
         self.globs = pd.DataFrame(log, columns=['parameter', 'value', 'section']).set_index('parameter')
 
-    def get_glob(self, parameter, section = None):
+    def get_glob(self, parameter, section=None):
         if section is not None:
             df = self.globs[self.globs['section'] == section]
         else:
@@ -99,8 +99,13 @@ class Traces():
         except ValueError:
             return df.loc[parameter]['value']
 
-    def set_glob(self, parameter, value, section = ''):
-        self.globs.loc[parameter] = [value, section]
+    def set_glob(self, parameter, value, section=''):
+        try:
+            self.globs.loc[parameter] = [value, section]
+        except ValueError:
+            self.globs = pd.DataFrame(columns=['parameter', 'value', 'section'])
+            self.globs.loc[0] = [parameter, value, section]
+            self.globs.set_index('parameter', inplace=True)
 
 
 def get_color(name):

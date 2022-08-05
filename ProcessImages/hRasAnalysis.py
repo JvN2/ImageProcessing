@@ -25,6 +25,9 @@ if __name__ == "__main__":
     # filename = r'D:\Data\Radek\22020725\data_035X\data_035.dat'
 
     data = ta.Traces(filename)
+    print(data.traces)
+    breakpoint()
+
     if data.traces.empty:
         # read and process imaging parameters
         data.traces = pd.read_csv(Path(filename).with_suffix('.dat'), sep='\t')

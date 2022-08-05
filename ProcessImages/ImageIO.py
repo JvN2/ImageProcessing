@@ -51,7 +51,8 @@ class Movie():
         plt.close(fig)
         return
 
-    def add_frame(self, red=None, green=None, blue=None, grey=None, label=None):
+    def add_frame(self, red=None, green=None, blue=None, grey=None, label=None, label_size = 100):
+
         self.frame_nr += 1
         if self.rgb_image is not None:
             self.rgb_image *= 0
@@ -75,9 +76,9 @@ class Movie():
         im = Image.fromarray(np.clip(self.rgb_image, 0, 255).astype(np.uint8), mode='RGB')
 
         draw = ImageDraw.Draw(im)
+
         if label is not None:
-            font_family = "arial.ttf"
-            font = ImageFont.truetype(font_family, 15)
+            font = ImageFont.truetype("arial.ttf", label_size)
             draw.text([10, 10], label, color='white', font=font)
 
         for i, coords in enumerate(self.circle_coords):
@@ -85,7 +86,7 @@ class Movie():
             draw.ellipse(circle, outline='white')
             if self.frame_nr == 0:
                 text_position = 0.3 * self.circle_radius * np.ones(2)
-                draw.text(text_position + coords, f'{i}', fill='white', font=ImageFont.truetype(font_family, 10))
+                draw.text(text_position + coords, f'{i}', fill='white', font=font)
         del draw
 
         if self.codec in ['JPEG', 'PNG']:
