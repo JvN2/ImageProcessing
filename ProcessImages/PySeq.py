@@ -44,11 +44,7 @@ def read_image(filename):
     cv2.imshow(Path(filename).name, im_scaled)
 
 
-if __name__ == '__main__':
-    folder = r'D:\Data\Pyseq\20220804\data_015'
-
-    _MAKE_MOVIE_ = True
-
+def process_folder(foldername, make_movie=False):
     data = ta.Traces(folder)
 
     if data.traces.empty:
@@ -71,15 +67,15 @@ if __name__ == '__main__':
                         data.traces.at[index, 'I532nm (mW)'] = float(values[0])
                     if item == 'laser2':
                         data.traces.at[index, 'I660nm (mW)'] = float(values[0])
-        data.set_glob('Date',datetime.fromtimestamp(data.traces['Timestamp'].min()).strftime("%m/%d/%Y"), 'Aquisition')
-        data.set_glob('Time',datetime.fromtimestamp(data.traces['Timestamp'].min()).strftime("%H:%M:%S"), 'Aquisition')
+        data.set_glob('Date', datetime.fromtimestamp(data.traces['Timestamp'].min()).strftime("%m/%d/%Y"), 'Aquisition')
+        data.set_glob('Time', datetime.fromtimestamp(data.traces['Timestamp'].min()).strftime("%H:%M:%S"), 'Aquisition')
         data.set_glob('Timestamp', data.traces['Timestamp'].min(), 'Aquisition')
         data.traces.insert(loc=1, column='Time (s)', value=data.traces['Timestamp'] - data.traces['Timestamp'].min())
         data.traces.sort_values(by=['Time (s)'], inplace=True)
-        data.traces.drop('Timestamp', axis= 1, inplace=True)
+        data.traces.drop('Timestamp', axis=1, inplace=True)
         data.to_file()
 
-    if _MAKE_MOVIE_:
+    if make_movie:
         movie = iio.Movie(str(Path(data.filename).with_suffix('.mp4')), 4)
         # radius_pix = 0.001 * data.get_glob('Radius (nm)') / data.get_glob('Pixel size (um)')
         # movie.set_circles(np.asarray(data.pars[['X (pix)', 'Y (pix)']]), radius_pix)
@@ -102,3 +98,8 @@ if __name__ == '__main__':
 
             label = f'Channel = {colors["red"]}, T = {data.traces.iloc[frame]["Time (s)"]:.0f} s'
             movie.add_frame(red=image['red'], green=image['green'], blue=image['blue'], label=label)
+
+
+if __name__ == '__main__':
+    folder = r'D:\Users\lion\20220804\data_015'
+    process_folder(folder, make_movie=True)
