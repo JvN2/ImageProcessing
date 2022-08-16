@@ -7,9 +7,11 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-import ProcessImages.ImageIO as iio
-import ProcessImages.TraceAnalysis as ta
+import sys, os
 
+# sys.path.append('C:/Users/lion/PycharmProjects/')
+import ImageProcessing.ProcessImages.ImageIO as iio
+import ImageProcessing.ProcessImages.TraceAnalysis as ta
 
 def read_image(filename):
     try:
@@ -44,7 +46,7 @@ def read_image(filename):
     cv2.imshow(Path(filename).name, im_scaled)
 
 
-def process_folder(foldername, make_movie=False):
+def process_folder(folder, make_movie=False):
     data = ta.Traces(folder)
 
     if data.traces.empty:
