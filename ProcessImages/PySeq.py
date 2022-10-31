@@ -11,39 +11,6 @@ import ProcessImages.ImageIO as iio
 import ProcessImages.TraceAnalysis as ta
 
 
-def read_image(filename):
-    try:
-        im = cv2.imread(filename, cv2.IMREAD_ANYDEPTH).astype(float).T
-    except AttributeError:
-        return
-    # plt.plot(im)
-    # plt.show()
-    # return
-    for i, _ in enumerate(im):
-        im[i] -= np.percentile(im[i], 2)
-
-    # scale intensity
-    # i_range = [np.percentile(im, 2), np.percentile(im, 95)]
-    # im -= i_range[0]
-    # im /= i_range[1] -i_range[0]
-    # im *= 255
-
-    plt.imshow(im, cmap='Greys_r', vmin=-0.1 * np.percentile(im, 90), vmax=1.2 * np.percentile(im, 90))
-    plt.colorbar()
-    plt.show()
-    return
-
-    # resize image
-    scale_percent = 30
-    width = int(im.shape[1] * scale_percent / 100)
-    height = int(im.shape[0] * scale_percent / 100)
-    dim = (width, height)
-    im = cv2.resize(im, dim, interpolation=cv2.INTER_AREA)
-
-    im_scaled = np.clip((im - range[0]) / (range[1] - range[0]), 0, 1)
-    cv2.imshow(Path(filename).name, im_scaled)
-
-
 if __name__ == '__main__':
     folder = r'D:\Data\Pyseq\20220804\data_015'
 
