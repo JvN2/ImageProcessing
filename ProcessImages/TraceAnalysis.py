@@ -9,7 +9,10 @@ from hmmlearn.hmm import GaussianHMM
 from natsort import natsorted
 from tqdm import tqdm
 
-import ProcessImages.ImageIO as iio
+import sys, os
+
+# sys.path.append('C:/Users/lion/PycharmProjects/')
+import ImageProcessing.ProcessImages.ImageIO as iio
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
