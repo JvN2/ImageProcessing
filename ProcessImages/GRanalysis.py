@@ -39,27 +39,29 @@ def create_mask(df, wavelength=[890, 930], percentile=99, normailize=False, show
         return mask
 
 
-def calculate_spectrum(df, mask, name='Fluorescence (a.u)', show=False):
-
+def calculate_spectrum(df, mask, name='Fluorescence (a.u)', show=False, excitation_filename=None):
     mask = np.asarray(mask).astype(int)
     intensity = []
 
     for i, row in tqdm(df.iterrows(), total=df.shape[0]):
         im = im3.read_tiff(row['Filename'])
         im -= np.percentile(im, 30)
-        intensity.append(np.mean(im[mask>0.5]))
+        intensity.append(np.mean(im[mask > 0.5]))
 
     df[name] = intensity
 
-    excitation = df['Photodiode (mW)']
-    kernel_size = 10
-    kernel = np.ones(kernel_size) / kernel_size
-    excitation = np.convolve(excitation, kernel, mode='same')
+    if excitation_filename is None:
+        excitation = df['Photodiode (mW)']
+        kernel_size = 10
+        kernel = np.ones(kernel_size) / kernel_size
+        excitation = np.convolve(excitation, kernel, mode='same')
+    else:
+        excitation = get_excitation_spectrum(excitation_filename, df['Wavelength (nm)'])
     excitation /= np.mean(excitation)
     df['Excitation (a.u.)'] = excitation
 
-    df['Corrected ' + name] = intensity/np.square(np.asarray(excitation).astype(float))
-    df['Corrected ' + name] = df['Corrected ' + name] / np.sum( df['Corrected ' + name][ df['Corrected ' + name] <800])
+    df['Corrected ' + name] = intensity / np.square(np.asarray(excitation).astype(float))
+    df['Corrected ' + name] = df['Corrected ' + name] / np.sum(df['Corrected ' + name][df['Corrected ' + name] < 800])
 
     if show:
         plot_label = 'Corrected ' + name
@@ -70,15 +72,35 @@ def calculate_spectrum(df, mask, name='Fluorescence (a.u)', show=False):
         ax.set_ylabel(plot_label, color='blue')
 
         ax2 = ax.twinx()
-        ax2.plot(df["Wavelength (nm)"], excitation**2, label='Excitation', color='red')
-        ax2.set_ylabel('Excitation^2 (a.u.)', color = 'red')
+        ax2.plot(df["Wavelength (nm)"], excitation ** 2, label='Excitation', color='red')
+        ax2.set_ylabel('Excitation^2 (a.u.)', color='red')
         plt.show()
     return df
 
 
+def get_weighted_average(x, y, x0, dx):
+    weight = np.exp(-0.5 * ((x - x0) / dx) ** 2)
+    weight /= np.sum(weight)
+    return np.sum(weight * y)
+
+
+def get_excitation_spectrum(filename, wavelength):
+    df = pd.read_csv(filename, sep='\t')
+    # plt.plot(df['Wavelength (nm)'], df['Photodiode (mW)'], 'or')
+    corrected_spectrum = [get_weighted_average(df['Wavelength (nm)'], df['Photodiode (mW)'], l, 3) for l in wavelength]
+    # plt.plot(wavelength, corrected_spectrum, color = 'black')
+    # plt.show()
+    return corrected_spectrum
+
+
 if __name__ == "__main__":
-    filename = r'\\data02\pi-vannoort\Noort\Data\Alex GR\data_004\data_004.dat'
+    spectrum_filename = r'D:\Internship 2022\TPMM data\221129_1 (excitation spectrum)\data_004 (spectrum)\data_004.dat'
+    # wavelength = np.linspace(700, 1000, 200)
+    # get_excitation_spectrum(filename, wavelength)
+
+    # filename = r'\\data02\pi-vannoort\Noort\Data\Alex GR\data_004\data_004.dat'
     filename = r'D:\Internship 2022\TPMM data\221017 (NFP5 part2)\data_021\data_021a.dat'
+    filename = r'D:\Internship 2022\TPMM data\221115_1\data_002\data_002.dat'
 
     # read and process imaging parameters
     df = pd.read_csv(filename, sep='\t')
@@ -92,11 +114,17 @@ if __name__ == "__main__":
     df.sort_values(by='Wavelength (nm)', inplace=True)
 
     # make_movie(df)
-    nucleus_mask = create_mask(df, show=False)
-    df = calculate_spectrum(df, nucleus_mask, show=True, name='nucleus')
+    nucleus_mask = create_mask(df, show=True)
+    df = calculate_spectrum(df, nucleus_mask, show=True, name='nucleus', excitation_filename=spectrum_filename)
 
-    cell_mask = create_mask(df, [730, 830], percentile=80)
+    cell_mask = create_mask(df, [730, 830], percentile=80, show=True)
+
+    backgroud_mask = 1.0 - np.asarray((cell_mask > 0))
+    plt.imshow(backgroud_mask, cmap='Greys_r')
+    plt.colorbar()
+    plt.show()
+
     cell_mask -= nucleus_mask
-
-    df = calculate_spectrum(df, cell_mask, show=True, name='cytoplasm')
+    df = calculate_spectrum(df, cell_mask, show=True, name='cytoplasm', excitation_filename=spectrum_filename)
+    df = calculate_spectrum(df, backgroud_mask, show=True, name='background', excitation_filename=spectrum_filename)
     df.to_csv(filename.replace('.dat', '.csv'))
